@@ -63,6 +63,33 @@ def setup(base, texture):
     return src
 
 
+def allow_custom_pipelines():
+    """Newer diffusers refuses Hunyuan's bundled custom paint pipeline without trust_remote_code."""
+    from diffusers import DiffusionPipeline
+    if getattr(DiffusionPipeline, "_hy3d_trusts_code", False):
+        return
+    orig = DiffusionPipeline.from_pretrained.__func__
+
+    def from_pretrained(cls, *args, **kw):
+        kw.setdefault("trust_remote_code", True)
+        return orig(cls, *args, **kw)
+
+    DiffusionPipeline.from_pretrained = classmethod(from_pretrained)
+    DiffusionPipeline._hy3d_trusts_code = True
+
+
+def code_updated(auth_config):
+    """Fast-forward this checkout of the repo; True if new code arrived."""
+    git_auth = ["git", *auth_config, "-C", str(ROOT)]
+    before = subprocess.run(git_auth + ["rev-parse", "HEAD"], capture_output=True, text=True).stdout
+    res = subprocess.run(git_auth + ["pull", "-q", "--ff-only"], capture_output=True, text=True)
+    if res.returncode != 0:
+        print("self-update failed:", res.stderr.strip(), flush=True)
+        return False
+    after = subprocess.run(git_auth + ["rev-parse", "HEAD"], capture_output=True, text=True).stdout
+    return before != after
+
+
 class Engine:
     """Lazily loads and caches Hunyuan3D pipelines."""
 
@@ -110,6 +137,7 @@ class Engine:
             raise ValueError(f"unknown paint variant {variant!r}; choose from {list(PAINT_VARIANTS)}")
         if self.paint_variant != variant:
             from hy3dgen.texgen import Hunyuan3DPaintPipeline
+            allow_custom_pipelines()
             self.paint = None
             self.free()
             self.paint = Hunyuan3DPaintPipeline.from_pretrained("tencent/Hunyuan3D-2",
@@ -198,7 +226,7 @@ class Engine:
                 "textured": bool(o.get("texture"))}
 
 
-def serve(q, engine, poll, heartbeat_every, once=False):
+def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_config=()):
     session = f"{socket.gethostname()}-{os.getpid()}"
     gpu = engine.gpu()
     texture = engine.can_texture()
@@ -217,7 +245,7 @@ def serve(q, engine, poll, heartbeat_every, once=False):
         if (q.status(j) or {}).get("state") in ("claimed", "running"):
             q.publish({}, f"requeue {j}", remove=[f"jobs/{j}/status.json"])
     beat("idle")
-    last_beat = time.time()
+    last_beat = last_update = time.time()
     print(f"worker {session} on {gpu}; polling every {poll}s", flush=True)
 
     while True:
@@ -231,6 +259,11 @@ def serve(q, engine, poll, heartbeat_every, once=False):
         if not pending:
             if once:
                 return
+            if update_every and time.time() - last_update > update_every:
+                last_update = time.time()
+                if code_updated(auth_config):
+                    print("new worker code on main; restarting", flush=True)
+                    os.execv(sys.executable, [sys.executable, "-u", *sys.argv])
             if time.time() - last_beat > heartbeat_every:
                 beat("idle")
                 last_beat = time.time()
@@ -290,6 +323,8 @@ def main():
     p.add_argument("--poll", type=int, default=10)
     p.add_argument("--heartbeat", type=int, default=600, help="seconds between idle heartbeats")
     p.add_argument("--once", action="store_true", help="exit when the queue is empty")
+    p.add_argument("--update-every", type=int, default=60,
+                   help="seconds between checks for new code on main while idle (0 = never)")
     a = p.parse_args()
 
     if a.setup or a.setup_only:
@@ -306,7 +341,8 @@ def main():
     q = Queue(Path(a.base) / "queue", f"https://github.com/{a.repo}.git",
               name="hy3d-worker", email="hy3d-worker@localhost",
               config={"http.https://github.com/.extraheader": f"AUTHORIZATION: basic {auth}"}).ensure()
-    serve(q, Engine(), a.poll, a.heartbeat, once=a.once)
+    serve(q, Engine(), a.poll, a.heartbeat, once=a.once, update_every=a.update_every,
+          auth_config=["-c", f"http.https://github.com/.extraheader=AUTHORIZATION: basic {auth}"])
 
 
 if __name__ == "__main__":

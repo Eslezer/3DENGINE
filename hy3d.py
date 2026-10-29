@@ -225,7 +225,7 @@ def cmd_preview(a):
     fig.suptitle(f"{Path(a.glb).name}: {len(mesh.vertices)} verts, {len(mesh.faces)} faces"
                  + (", textured" if textured else ""))
     fig.tight_layout()
-    fig.savefig(out, dpi=90)
+    fig.savefig(out, dpi=110, bbox_inches="tight")
     print(out)
 
 
@@ -273,7 +273,7 @@ def main():
     pv = sub.add_parser("preview", help="render a GLB to a PNG contact sheet")
     pv.add_argument("glb")
     pv.add_argument("--out")
-    pv.add_argument("--faces", type=int, default=15000, help="decimate for plotting speed")
+    pv.add_argument("--faces", type=int, default=150000, help="subsample above this many faces for plotting speed")
 
     a = p.parse_args()
     handler = {"submit": cmd_submit, "wait": cmd_wait, "fetch": cmd_fetch, "status": cmd_status,

@@ -1,6 +1,6 @@
 {
-  "time": "2026-10-29T23:52:30Z",
+  "time": "2026-10-29T23:54:03Z",
   "worker": "a9fcece3f7e5-176",
-  "state": "running",
-  "stage": "painting texture (full)"
+  "state": "error",
+  "error": "RuntimeError: Something wrong while loading /root/.cache/huggingface/hub/models--tencent--Hunyuan3D-2/snapshots/9cd649ba6913f7a852e3286bad86bfa9a2d83dcf"
 }

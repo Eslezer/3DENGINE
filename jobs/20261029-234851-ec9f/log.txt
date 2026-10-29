@@ -1,0 +1,68 @@
+Traceback (most recent call last):
+  File "/tmp/hy3d/Hunyuan3D-2/hy3dgen/texgen/pipelines.py", line 77, in from_pretrained
+    return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path, subfolder))
+  File "/tmp/hy3d/Hunyuan3D-2/hy3dgen/texgen/pipelines.py", line 96, in __init__
+    self.load_models()
+    ~~~~~~~~~~~~~~~~^^
+  File "/tmp/hy3d/Hunyuan3D-2/hy3dgen/texgen/pipelines.py", line 103, in load_models
+    self.models['multiview_model'] = Multiview_Diffusion_Net(self.config)
+                                     ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/tmp/hy3d/Hunyuan3D-2/hy3dgen/texgen/utils/multiview_utils.py", line 34, in __init__
+    pipeline = DiffusionPipeline.from_pretrained(
+        multiview_ckpt_path,
+        custom_pipeline=custom_pipeline_path, torch_dtype=torch.float16)
+  File "/usr/local/lib/python3.13/dist-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+  File "/usr/local/lib/python3.13/dist-packages/diffusers/pipelines/pipeline_utils.py", line 945, in from_pretrained
+    pipeline_class = _get_pipeline_class(
+        cls,
+    ...<6 lines>...
+        trust_remote_code=trust_remote_code,
+    )
+  File "/usr/local/lib/python3.13/dist-packages/diffusers/pipelines/pipeline_loading_utils.py", line 509, in _get_pipeline_class
+    return _get_custom_pipeline_class(
+        custom_pipeline,
+    ...<5 lines>...
+        trust_remote_code=trust_remote_code,
+    )
+  File "/usr/local/lib/python3.13/dist-packages/diffusers/pipelines/pipeline_loading_utils.py", line 486, in _get_custom_pipeline_class
+    return get_class_from_dynamic_module(
+        custom_pipeline,
+    ...<4 lines>...
+        trust_remote_code=trust_remote_code,
+    )
+  File "/usr/local/lib/python3.13/dist-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+  File "/usr/local/lib/python3.13/dist-packages/diffusers/utils/dynamic_modules_utils.py", line 531, in get_class_from_dynamic_module
+    final_module = get_cached_module_file(
+        pretrained_model_name_or_path,
+    ...<9 lines>...
+        trust_remote_code=trust_remote_code,
+    )
+  File "/usr/local/lib/python3.13/dist-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+  File "/usr/local/lib/python3.13/dist-packages/diffusers/utils/dynamic_modules_utils.py", line 324, in get_cached_module_file
+    raise ValueError(
+    ...<3 lines>...
+    )
+ValueError: The directory /tmp/hy3d/Hunyuan3D-2/hy3dgen/texgen/utils/../hunyuanpaint contains custom code in pipeline.py which must be executed to correctly load the model. You can inspect the file content at /tmp/hy3d/Hunyuan3D-2/hy3dgen/texgen/utils/../hunyuanpaint/pipeline.py.
+Pass `trust_remote_code=True` to allow loading remote code modules.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/tmp/hy3d/3DENGINE/worker.py", line 255, in serve
+    info = engine.run(image, job.get("options", {}), out, stage)
+  File "/tmp/hy3d/3DENGINE/worker.py", line 192, in run
+    mesh = self.texture(mesh, image, o.get("paint", "full"), stage)
+  File "/tmp/hy3d/3DENGINE/worker.py", line 131, in texture
+    return self.paint_pipe(variant)(mesh, image=image)
+           ~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/tmp/hy3d/3DENGINE/worker.py", line 115, in paint_pipe
+    self.paint = Hunyuan3DPaintPipeline.from_pretrained("tencent/Hunyuan3D-2",
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+                                                        subfolder=PAINT_VARIANTS[variant])
+                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hy3d/Hunyuan3D-2/hy3dgen/texgen/pipelines.py", line 81, in from_pretrained
+    raise RuntimeError(f"Something wrong while loading {model_path}")
+RuntimeError: Something wrong while loading /root/.cache/huggingface/hub/models--tencent--Hunyuan3D-2/snapshots/9cd649ba6913f7a852e3286bad86bfa9a2d83dcf

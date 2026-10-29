@@ -39,6 +39,7 @@ PRESETS = {
     "mini-turbo": ("tencent/Hunyuan3D-2mini", "hunyuan3d-dit-v2-mini-turbo", 5, True),
     "v2-1": ("tencent/Hunyuan3D-2.1", "hunyuan3d-dit-v2-1", 30, False),
 }
+PAINT_VARIANTS = {"full": "hunyuan3d-paint-v2-0", "turbo": "hunyuan3d-paint-v2-0-turbo"}
 SKIP_REQS = re.compile(r"^(torch|torchvision|torchaudio|gradio|fastapi|uvicorn|bpy)\b", re.I)
 
 
@@ -70,7 +71,16 @@ class Engine:
         self.torch = torch
         self.shape = {}
         self.paint = None
+        self.paint_variant = None
+        self.offload = False
         self.rembg = None
+
+    def can_texture(self):
+        try:
+            import custom_rasterizer  # noqa: F401  built by `worker.py --setup --texture`
+            return True
+        except ImportError:
+            return False
 
     def gpu(self):
         t = self.torch
@@ -95,15 +105,42 @@ class Engine:
             self.shape[preset] = pipe
         return self.shape[preset]
 
-    def paint_pipe(self):
-        if self.paint is None:
+    def paint_pipe(self, variant):
+        if variant not in PAINT_VARIANTS:
+            raise ValueError(f"unknown paint variant {variant!r}; choose from {list(PAINT_VARIANTS)}")
+        if self.paint_variant != variant:
             from hy3dgen.texgen import Hunyuan3DPaintPipeline
-            self.paint = Hunyuan3DPaintPipeline.from_pretrained("tencent/Hunyuan3D-2")
-            try:
-                self.paint.enable_model_cpu_offload()  # T4/P100 have ~16 GB; shape+paint is tight
-            except Exception as e:
-                print("cpu offload unavailable:", e)
+            self.paint = None
+            self.free()
+            self.paint = Hunyuan3DPaintPipeline.from_pretrained("tencent/Hunyuan3D-2",
+                                                                subfolder=PAINT_VARIANTS[variant])
+            self.paint_variant = variant
+            if self.offload:
+                self.paint.enable_model_cpu_offload()
         return self.paint
+
+    def texture(self, mesh, image, variant, stage):
+        """Paint ``mesh`` with the shape models parked on the CPU so paint gets the whole GPU."""
+        parked = list(self.shape.values())
+        for p in parked:
+            p.to("cpu")
+        self.free()
+        try:
+            stage(f"painting texture ({variant})")
+            try:
+                return self.paint_pipe(variant)(mesh, image=image)
+            except self.torch.cuda.OutOfMemoryError:
+                if self.offload:
+                    raise
+                # Fall back to sequential CPU offload: slower, but fits ~16 GB cards.
+                stage(f"painting texture ({variant}, out of VRAM, retrying with CPU offload)")
+                self.offload = True
+                self.paint_variant = None
+                return self.paint_pipe(variant)(mesh, image=image)
+        finally:
+            self.free()
+            for p in parked:
+                p.to("cuda")
 
     def free(self):
         gc.collect()
@@ -149,23 +186,26 @@ class Engine:
             mesh = FaceReducer()(mesh, max_facenum=o["max_faces"])
 
         if o.get("texture"):
-            stage("painting texture")
-            self.free()
-            mesh = self.paint_pipe()(mesh, image=image)
+            if not self.can_texture():
+                raise RuntimeError("texture requested but the texture extensions aren't built; "
+                                   "set TEXTURE = True in the notebook and rerun setup")
+            mesh = self.texture(mesh, image, o.get("paint", "full"), stage)
 
         stage("exporting")
         mesh.export(out_path)
         self.free()
-        return {"vertices": int(len(mesh.vertices)), "faces": int(len(mesh.faces))}
+        return {"vertices": int(len(mesh.vertices)), "faces": int(len(mesh.faces)),
+                "textured": bool(o.get("texture"))}
 
 
 def serve(q, engine, poll, heartbeat_every, once=False):
     session = f"{socket.gethostname()}-{os.getpid()}"
     gpu = engine.gpu()
+    texture = engine.can_texture()
 
     def beat(state):
         q.publish({"worker/heartbeat.json": json.dumps(
-            {"time": now(), "state": state, "gpu": gpu, "host": session}, indent=2)},
+            {"time": now(), "state": state, "gpu": gpu, "host": session, "texture": texture}, indent=2)},
             f"heartbeat {state}")
 
     def set_status(job_id, **st):

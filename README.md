@@ -1,6 +1,6 @@
 # 3DENGINE: remote Hunyuan3D via Kaggle
 
-Turn images into 3D models (GLB) with [Hunyuan3D-2](https://github.com/Tencent/Hunyuan3D-2) running on a free Kaggle GPU, driven from anywhere that can `git push` to this repo. That includes a Claude Code cloud session, whose network can reach GitHub but not Kaggle or Hugging Face.
+Turn images into textured 3D models (a single GLB with the texture embedded) with [Hunyuan3D-2](https://github.com/Tencent/Hunyuan3D-2) running on a free Kaggle GPU, driven from anywhere that can `git push` to this repo. That includes a Claude Code cloud session, whose network can reach GitHub but not Kaggle or Hugging Face.
 
 ```
  client (hy3d.py)                 GitHub: branch "queue"                 Kaggle notebook (worker.py)
@@ -18,16 +18,16 @@ No tunnels, no open ports. The worker only makes outbound connections to GitHub 
 1. Create a GitHub **fine-grained token**: *Settings → Developer settings → Fine-grained tokens*, repository access limited to this repo, permission **Contents: Read and write**.
 2. On Kaggle: *Create → New Notebook → File → Import Notebook*, then upload [`kaggle/hy3d_worker.ipynb`](kaggle/hy3d_worker.ipynb).
 3. Notebook settings: **Accelerator: GPU T4 x2**, **Internet: on**. Under *Add-ons → Secrets*, add `GITHUB_TOKEN` and attach it to the notebook.
-4. **Run All**. Setup takes about 5 minutes (about 15 with `TEXTURE = True`). The last cell prints `worker ... polling` and serves jobs until stopped.
+4. **Run All**. Setup takes about 15 minutes, mostly building the texture extensions (about 5 if you set `TEXTURE = False` for shapes only). The last cell prints `worker ... polling` and serves jobs until stopped.
    - For a headless worker that keeps going after you close the tab, use *Save Version → Save & Run All (Commit)*. It runs for up to 12 h and draws on your 30 h/week GPU quota.
 
 ## 2. Submit jobs
 
 ```bash
 python3 hy3d.py status                         # is the worker alive?
-python3 hy3d.py submit cat.png --wait          # → outputs/<job>/result.glb
-python3 hy3d.py submit cat.png --model v2-turbo --octree 380 --wait
-python3 hy3d.py submit cat.png --texture --wait   # needs TEXTURE = True in the notebook
+python3 hy3d.py submit cat.png --wait          # shape + texture → outputs/<job>/result.glb
+python3 hy3d.py submit cat.png --paint turbo --wait          # faster texture
+python3 hy3d.py submit cat.png --no-texture --model v2-turbo --wait   # quick shape-only draft
 python3 hy3d.py preview outputs/<job>/result.glb  # PNG contact sheet (pip install trimesh matplotlib)
 python3 hy3d.py clean --done                   # remove finished jobs from the queue branch
 python3 hy3d.py reset-queue --yes              # squash queue history to reclaim repo space
@@ -39,11 +39,12 @@ python3 hy3d.py reset-queue --yes              # squash queue history to reclaim
 | `--steps` | 30 / 5 turbo | diffusion steps |
 | `--octree` | 256 | mesh grid resolution; 380 gives more detail and is slower |
 | `--max-faces` | 40000 | decimation target; 0 keeps the full mesh |
-| `--texture` | off | multiview texture painting; slow, near the T4's VRAM limit |
+| `--no-texture` | texture on | skip Hunyuan texture painting |
+| `--paint` | `full` | Hunyuan paint model: `full` (better) or `turbo` (faster) |
 | `--no-rembg` | off | skip background removal (it is skipped automatically for images that already have transparency) |
 | `--seed`, `--guidance` | 1234, 5.0 | |
 
-Expect about 30 to 90 s per untextured `v2` job on a T4 once weights are cached (the first job of each preset also downloads several GB). Turbo is faster.
+Rough T4 timings once weights are cached: shape 30 to 90 s, texture another 1 to 3 min. The first job also downloads several GB of weights. While painting, the worker moves the shape model to CPU so the texture model gets the whole GPU, and falls back to CPU offload if it still runs out of memory.
 
 ## Notes
 

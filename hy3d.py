@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Client for the remote Hunyuan3D worker running in a Kaggle notebook.
 
-    python3 hy3d.py submit photo.png --wait          # image -> outputs/<job>/result.glb
-    python3 hy3d.py submit photo.png --texture --model v2-turbo
+    python3 hy3d.py submit photo.png --wait          # image -> textured outputs/<job>/result.glb
+    python3 hy3d.py submit photo.png --no-texture --model v2-turbo   # quick untextured draft
     python3 hy3d.py status                           # worker heartbeat + recent jobs
     python3 hy3d.py wait <job_id>
     python3 hy3d.py fetch <job_id>
@@ -64,7 +64,8 @@ def cmd_submit(a):
             "octree_resolution": a.octree,
             "guidance_scale": a.guidance,
             "seed": a.seed,
-            "texture": a.texture,
+            "texture": not a.no_texture,
+            "paint": a.paint,
             "max_faces": a.max_faces,
             "remove_bg": not a.no_rembg,
         },
@@ -79,6 +80,9 @@ def cmd_submit(a):
         print("warning: no worker has ever checked in; start the Kaggle notebook")
     else:
         print(f"worker last seen {age(hb.get('time'))} ago ({hb.get('state', '?')})")
+        if not a.no_texture and hb.get("texture") is False:
+            print("warning: worker has no texture support (TEXTURE = False in the notebook); "
+                  "this job will fail. Resubmit with --no-texture or rerun the notebook with TEXTURE = True")
     if a.wait:
         a.job = job_id
         return cmd_wait(a)
@@ -136,7 +140,7 @@ def cmd_status(a):
     hb = q.read_json("worker/heartbeat.json")
     if hb:
         print(f"worker: {hb.get('state')} (seen {age(hb.get('time'))} ago, "
-              f"gpu={hb.get('gpu')}, host={hb.get('host')})")
+              f"gpu={hb.get('gpu')}, texture={hb.get('texture', '?')}, host={hb.get('host')})")
     else:
         print("worker: never seen")
     jobs = [a.job] if a.job else q.jobs()[-a.limit:]
@@ -180,32 +184,46 @@ def cmd_preview(a):
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        import numpy as np
         import trimesh
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     except ImportError:
         sys.exit("preview needs: pip install trimesh matplotlib")
     mesh = trimesh.load(a.glb, force="mesh")
-    if len(mesh.faces) > a.faces:
-        try:
-            mesh = mesh.simplify_quadric_decimation(face_count=a.faces)
-        except Exception:
-            idx = sorted(__import__("random").Random(0).sample(range(len(mesh.faces)), a.faces))
-            mesh = trimesh.Trimesh(mesh.vertices, mesh.faces[idx], process=False)
+    faces = mesh.faces
+    try:  # sample the texture (or vertex colors) per face
+        vc = mesh.visual.to_color().vertex_colors[:, :3] / 255.0
+        fc = vc[faces].mean(axis=1)
+        textured = mesh.visual.kind is not None and not np.allclose(fc, fc[0])
+    except Exception:
+        textured = False
+    if not textured:
+        fc = np.tile([0.72, 0.77, 0.84], (len(faces), 1))
+    if len(faces) > a.faces:
+        idx = np.random.default_rng(0).choice(len(faces), a.faces, replace=False)
+        faces, fc = faces[idx], fc[idx]
     v = mesh.vertices - mesh.bounds.mean(axis=0)
     v = v / (abs(v).max() or 1)
+    v = np.stack([v[:, 0], -v[:, 2], v[:, 1]], axis=1)  # GLB is Y-up; matplotlib is Z-up
+    tris = v[faces]
+    n = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
+    n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
     out = Path(a.out or Path(a.glb).with_suffix(".preview.png"))
-    views = [(15, -60), (15, 30), (15, 120), (60, -60)]
-    fig = plt.figure(figsize=(4 * len(views), 4))
+    views = [(15, -60), (15, 30), (15, 120), (15, 210)]
+    fig = plt.figure(figsize=(4 * len(views), 4.4))
     for i, (elev, azim) in enumerate(views):
         ax = fig.add_subplot(1, len(views), i + 1, projection="3d")
-        # GLB is Y-up; matplotlib is Z-up.
-        ax.plot_trisurf(v[:, 0], -v[:, 2], v[:, 1], triangles=mesh.faces,
-                        color="#b9c4d6", edgecolor="none", shade=True, linewidth=0)
+        e, z = np.radians(elev), np.radians(azim)
+        eye = np.array([np.cos(e) * np.cos(z), np.cos(e) * np.sin(z), np.sin(e)])
+        shade = 0.45 + 0.55 * np.abs(n @ eye)  # headlight lambert
+        ax.add_collection3d(Poly3DCollection(tris, facecolors=np.clip(fc * shade[:, None], 0, 1),
+                                             edgecolor="none", linewidth=0))
         ax.view_init(elev=elev, azim=azim)
         ax.set_box_aspect((1, 1, 1))
-        lim = (-1, 1)
-        ax.set_xlim(lim); ax.set_ylim(lim); ax.set_zlim(lim)
+        ax.set_xlim(-1, 1); ax.set_ylim(-1, 1); ax.set_zlim(-1, 1)
         ax.set_axis_off()
-    fig.suptitle(f"{Path(a.glb).name}: {len(mesh.vertices)} verts, {len(mesh.faces)} faces")
+    fig.suptitle(f"{Path(a.glb).name}: {len(mesh.vertices)} verts, {len(mesh.faces)} faces"
+                 + (", textured" if textured else ""))
     fig.tight_layout()
     fig.savefig(out, dpi=90)
     print(out)
@@ -223,7 +241,9 @@ def main():
     s.add_argument("--octree", type=int, default=256, help="mesh resolution: 256 fast, 380 detailed")
     s.add_argument("--guidance", type=float, default=5.0)
     s.add_argument("--seed", type=int, default=1234)
-    s.add_argument("--texture", action="store_true", help="also paint a texture (slow, more VRAM)")
+    s.add_argument("--no-texture", action="store_true", help="shape only, skip texture painting")
+    s.add_argument("--paint", choices=["full", "turbo"], default="full",
+                   help="Hunyuan paint model: full (better) or turbo (faster)")
     s.add_argument("--max-faces", type=int, default=40000, help="decimate to this many faces (0 = keep)")
     s.add_argument("--no-rembg", action="store_true", help="skip background removal")
     s.add_argument("--wait", action="store_true", help="block until the result is downloaded")

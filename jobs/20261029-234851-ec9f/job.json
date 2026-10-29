@@ -1,0 +1,17 @@
+{
+  "id": "20261029-234851-ec9f",
+  "created": "2026-10-29T23:48:51Z",
+  "image": "input.png",
+  "source_name": "bf5f5c06-image.png",
+  "options": {
+    "model": "v2",
+    "steps": null,
+    "octree_resolution": 256,
+    "guidance_scale": 5.0,
+    "seed": 1234,
+    "texture": true,
+    "paint": "full",
+    "max_faces": 40000,
+    "remove_bg": true
+  }
+}

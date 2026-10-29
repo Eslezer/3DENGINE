@@ -16,7 +16,7 @@ No tunnels, no open ports. The worker only makes outbound connections to GitHub 
 ## 1. Start the worker on Kaggle (once per session)
 
 1. Create a GitHub **fine-grained token**: *Settings → Developer settings → Fine-grained tokens*, repository access limited to this repo, permission **Contents: Read and write**.
-2. On Kaggle: *Create → New Notebook → File → Import Notebook*, then upload [`kaggle/hy3d_worker.ipynb`](kaggle/hy3d_worker.ipynb).
+2. On Kaggle: *Create → New Notebook → File → Import Notebook*, then upload [`kaggle/hy3d_worker.ipynb`](kaggle/hy3d_worker.ipynb). On a phone, or if the upload fails, paste the contents of [`kaggle/hy3d_worker.py`](kaggle/hy3d_worker.py) into a single cell instead.
 3. Notebook settings: **Accelerator: GPU T4 x2**, **Internet: on**. Under *Add-ons → Secrets*, add `GITHUB_TOKEN` and attach it to the notebook.
 4. **Run All**. Setup takes about 15 minutes, mostly building the texture extensions (about 5 if you set `TEXTURE = False` for shapes only). The last cell prints `worker ... polling` and serves jobs until stopped.
    - For a headless worker that keeps going after you close the tab, use *Save Version → Save & Run All (Commit)*. It runs for up to 12 h and draws on your 30 h/week GPU quota.
@@ -59,3 +59,4 @@ Rough T4 timings once weights are cached: shape 30 to 90 s, texture another 1 to
 - `worker.py`: Kaggle/GPU worker; `--setup` installs Hunyuan3D-2
 - `hy3d_queue.py`: shared git queue
 - `kaggle/hy3d_worker.ipynb`: notebook that runs the worker
+- `kaggle/hy3d_worker.py`: the same thing as one paste-into-a-cell script

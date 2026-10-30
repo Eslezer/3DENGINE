@@ -110,6 +110,7 @@ def cmd_submit(a):
             "resolution": a.resolution,
             "texture_size": a.texture_size,
             "painter": a.painter,
+            "pin_front": not a.no_pin_front,
         },
     }
     q.publish(
@@ -319,6 +320,8 @@ def main():
     s.add_argument("--texture-size", type=int, default=4096, help="trellis2 only: texture map size in px")
     s.add_argument("--painter", choices=["trellis", "ultratex"], default="trellis",
                    help="trellis2 only: who paints the texture (ultratex = FLUX.2 + UltraTex, non-commercial license)")
+    s.add_argument("--no-pin-front", action="store_true",
+                   help="ultratex only: let UltraTex repaint the front instead of keeping the reference image there")
     s.add_argument("--no-rembg", action="store_true", help="skip background removal")
     s.add_argument("--wait", action="store_true", help="block until the result is downloaded")
 

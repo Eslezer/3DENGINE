@@ -162,7 +162,7 @@ def workflow(names, mesh_path, ref_name, prefix, o):
     sampler = {"vae": ["dec", 0], "positive": ["pos", 0], "prep": ["prep", 0], "steps": steps, "seed": seed,
                "guidance": 4.0, "drop_background_tokens": True, "memory_factor": 0.0,
                "attention": "ultratex_sparse", "sparse_topk": 0.2, "token_chunk": 8192, "denoise": 1.0}
-    return {
+    graph = {
         "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": names["diffusion_models"], "weight_dtype": "default"}},
         "lora": {"class_type": "UltraTexLoraLoader", "inputs": {"model": ["unet", 0], "lora_name": names["lora"], "strength": 1.0}},
         "lora_mr": {"class_type": "UltraTexLoraLoader", "inputs": {"model": ["unet", 0], "lora_name": names["lora_mr"], "strength": 1.0}},
@@ -177,6 +177,8 @@ def workflow(names, mesh_path, ref_name, prefix, o):
             "render_size": 4096, "atlas_size": tex, "uv_mode": "keep_existing",
             "reference_alignment": "fit_front_silhouette", "mask_meaning": "background (LoadImage)"}},
         "albedo": {"class_type": "UltraTexSampler", "inputs": dict(sampler, model=["lora", 0], resolution=res)},
+        # Pin the front view to the reference (RePaint keep mask); the other five views are painted around it.
+        "pin": {"class_type": "Hy3dPinFront", "inputs": {"prep": ["prep", 0], "resolution": res, "erode_px": 6, "feather_px": 12}},
         "mr": {"class_type": "UltraTexSampler", "inputs": dict(sampler, model=["lora_mr", 0], resolution=min(res, 1024))},
         "bake": {"class_type": "UltraTexBake", "inputs": {
             "prep": ["prep", 0], "albedo_views": ["albedo", 0], "metallic_roughness_views": ["mr", 0],
@@ -187,6 +189,11 @@ def workflow(names, mesh_path, ref_name, prefix, o):
         "save_normals": {"class_type": "SaveImage", "inputs": {"images": ["prep", 1], "filename_prefix": prefix + "_normals"}},
         "save_views": {"class_type": "SaveImage", "inputs": {"images": ["albedo", 2], "filename_prefix": prefix + "_views"}},
     }
+    if o.get("pin_front", True):
+        graph["albedo"]["inputs"].update(init_views=["pin", 0], keep_mask=["pin", 1], denoise=1.0)
+    else:
+        del graph["pin"]
+    return graph
 
 
 # -- ComfyUI server -------------------------------------------------------------------
@@ -206,9 +213,11 @@ class Comfy:
         if self.proc and self.proc.poll() is None:
             return
         stage("starting ComfyUI")
+        self._kill_stale()
         log = open(self.dir / "comfyui.log", "a")
         self.proc = subprocess.Popen([sys.executable, "main.py", "--listen", "127.0.0.1", "--port", str(PORT),
                                       "--disable-auto-launch"], cwd=self.dir, stdout=log, stderr=subprocess.STDOUT)
+        (self.dir / "comfyui.pid").write_text(str(self.proc.pid))
         for _ in range(300):
             if self.proc.poll() is not None:
                 raise RuntimeError(f"ComfyUI exited; see {self.dir / 'comfyui.log'}:\n{self.tail()}")
@@ -218,6 +227,22 @@ class Comfy:
             except (urllib.error.URLError, OSError):
                 time.sleep(1)
         raise RuntimeError("ComfyUI did not start within 5 minutes:\n" + self.tail())
+
+    def _kill_stale(self):
+        """A worker that re-exec'd itself after a code update leaves its ComfyUI running (port + VRAM)."""
+        pidfile = self.dir / "comfyui.pid"
+        if not pidfile.exists():
+            return
+        try:
+            pid = int(pidfile.read_text())
+            os.kill(pid, 15)
+            for _ in range(30):
+                os.kill(pid, 0)  # raises once the process is gone
+                time.sleep(1)
+            os.kill(pid, 9)
+        except (ValueError, ProcessLookupError, PermissionError):
+            pass
+        pidfile.unlink(missing_ok=True)
 
     def tail(self, n=40):
         p = self.dir / "comfyui.log"
@@ -252,9 +277,17 @@ class Comfy:
         raise RuntimeError(f"UltraTex timed out after {timeout}s")
 
 
+def install_hy3d_nodes(comfy_dir):
+    """(Re)install this repo's ComfyUI nodes; cheap, so done on every painter start."""
+    dst = Path(comfy_dir) / "custom_nodes" / "hy3d_nodes"
+    shutil.rmtree(dst, ignore_errors=True)
+    shutil.copytree(ROOT / "ultratex_compat" / "hy3d_nodes", dst)
+
+
 class UltraTexPainter:
     def __init__(self, base):
         self.comfy_dir = Path(base) / "ComfyUI"
+        install_hy3d_nodes(self.comfy_dir)
         self.server = Comfy(self.comfy_dir)
         self.names = None
 

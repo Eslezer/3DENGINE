@@ -68,6 +68,8 @@ def cmd_submit(a):
             "paint": a.paint,
             "max_faces": a.max_faces,
             "remove_bg": not a.no_rembg,
+            "resolution": a.resolution,
+            "texture_size": a.texture_size,
         },
     }
     q.publish(
@@ -140,7 +142,8 @@ def cmd_status(a):
     hb = q.read_json("worker/heartbeat.json")
     if hb:
         print(f"worker: {hb.get('state')} (seen {age(hb.get('time'))} ago, "
-              f"gpu={hb.get('gpu')}, texture={hb.get('texture', '?')}, host={hb.get('host')})")
+              f"engine={hb.get('engine', 'hunyuan')}, gpu={hb.get('gpu')}, texture={hb.get('texture', '?')}, "
+              f"host={hb.get('host')})")
     else:
         print("worker: never seen")
     jobs = [a.job] if a.job else q.jobs()[-a.limit:]
@@ -148,7 +151,7 @@ def cmd_status(a):
         st = q.status(j) or {"state": "pending"}
         opts = (q.job(j) or {}).get("options", {})
         extra = st.get("stage") or st.get("error", "")[:80]
-        print(f"{j}  {st.get('state'):8} {opts.get('model', ''):10} "
+        print(f"{j}  {st.get('state'):8} {st.get('engine') or opts.get('model', ''):10} "
               f"{'tex' if opts.get('texture') else '   '}  {extra}")
 
 
@@ -244,7 +247,11 @@ def main():
     s.add_argument("--no-texture", action="store_true", help="shape only, skip texture painting")
     s.add_argument("--paint", choices=["full", "turbo"], default="full",
                    help="Hunyuan paint model: full (better) or turbo (faster)")
-    s.add_argument("--max-faces", type=int, default=40000, help="decimate to this many faces (0 = keep)")
+    s.add_argument("--max-faces", type=int,
+                   help="decimate to this many faces (0 = keep; default 40k hunyuan, 500k trellis2)")
+    s.add_argument("--resolution", type=int, choices=[512, 1024, 1536], default=1024,
+                   help="trellis2 only: voxel resolution (1536 = most detail, slowest)")
+    s.add_argument("--texture-size", type=int, default=4096, help="trellis2 only: texture map size in px")
     s.add_argument("--no-rembg", action="store_true", help="skip background removal")
     s.add_argument("--wait", action="store_true", help="block until the result is downloaded")
 

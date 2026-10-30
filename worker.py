@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Hunyuan3D worker: polls the ``queue`` branch of this repo and turns images into GLBs.
+"""3D worker: polls the ``queue`` branch of this repo and turns images into GLBs.
 
-Meant to run inside a Kaggle GPU notebook (see kaggle/hy3d_worker.ipynb), but works on
-any CUDA box with git access to the repo:
+Two engines:
+  hunyuan  Hunyuan3D-2 shape + paint; fits 16 GB cards (Kaggle, see kaggle/hy3d_worker.ipynb)
+  trellis2 TRELLIS.2 shape + PBR texture; wants 24 GB+ and CUDA 13 (molab, see molab/trellis_worker.py)
 
-    GITHUB_TOKEN=... python3 worker.py --setup            # one-time install of Hunyuan3D-2
-    GITHUB_TOKEN=... python3 worker.py                    # serve jobs forever
-    GITHUB_TOKEN=... python3 worker.py --setup --texture  # also build the texture extensions
+    GITHUB_TOKEN=... python3 worker.py --setup --texture            # Hunyuan, with texturing
+    GITHUB_TOKEN=... HF_TOKEN=... python3 worker.py --setup --engine trellis2
+    GITHUB_TOKEN=... python3 worker.py [--engine trellis2]          # serve jobs forever
 
 Assumes a single worker: on startup, jobs left "claimed"/"running" by a previous
 session are re-queued.
@@ -92,6 +93,8 @@ def code_updated(auth_config):
 
 class Engine:
     """Lazily loads and caches Hunyuan3D pipelines."""
+
+    name = "hunyuan"
 
     def __init__(self):
         import torch
@@ -210,8 +213,9 @@ class Engine:
         stage("cleaning mesh")
         mesh = FloaterRemover()(mesh)
         mesh = DegenerateFaceRemover()(mesh)
-        if o.get("max_faces"):
-            mesh = FaceReducer()(mesh, max_facenum=o["max_faces"])
+        max_faces = 40000 if o.get("max_faces") is None else o["max_faces"]
+        if max_faces:
+            mesh = FaceReducer()(mesh, max_facenum=max_faces)
 
         if o.get("texture"):
             if not self.can_texture():
@@ -223,7 +227,7 @@ class Engine:
         mesh.export(out_path)
         self.free()
         return {"vertices": int(len(mesh.vertices)), "faces": int(len(mesh.faces)),
-                "textured": bool(o.get("texture"))}
+                "textured": bool(o.get("texture")), "engine": self.name}
 
 
 def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_config=()):
@@ -233,7 +237,8 @@ def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_con
 
     def beat(state):
         q.publish({"worker/heartbeat.json": json.dumps(
-            {"time": now(), "state": state, "gpu": gpu, "host": session, "texture": texture}, indent=2)},
+            {"time": now(), "state": state, "gpu": gpu, "host": session, "texture": texture,
+             "engine": engine.name}, indent=2)},
             f"heartbeat {state}")
 
     def set_status(job_id, **st):
@@ -246,7 +251,7 @@ def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_con
             q.publish({}, f"requeue {j}", remove=[f"jobs/{j}/status.json"])
     beat("idle")
     last_beat = last_update = time.time()
-    print(f"worker {session} on {gpu}; polling every {poll}s", flush=True)
+    print(f"worker {session} ({engine.name}) on {gpu}; polling every {poll}s", flush=True)
 
     while True:
         try:
@@ -313,7 +318,8 @@ def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_con
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--setup", action="store_true", help="install Hunyuan3D-2 before serving")
+    p.add_argument("--engine", choices=["hunyuan", "trellis2"], default=os.environ.get("HY3D_ENGINE", "hunyuan"))
+    p.add_argument("--setup", action="store_true", help="install the engine before serving")
     p.add_argument("--setup-only", action="store_true")
     p.add_argument("--texture", action="store_true", help="with --setup: build texture CUDA extensions")
     # Not /kaggle/working: that directory is saved as notebook output.
@@ -327,22 +333,32 @@ def main():
                    help="seconds between checks for new code on main while idle (0 = never)")
     a = p.parse_args()
 
-    if a.setup or a.setup_only:
-        src = setup(a.base, a.texture)
-        sys.path.insert(0, str(src))
-        if a.setup_only:
-            return
-
     token = os.environ.get("GITHUB_TOKEN")
     if not token:
         sys.exit("set GITHUB_TOKEN (a PAT with Contents read/write on the repo)")
     # Auth via header rather than the URL so the token never shows up in git error output.
     auth = base64.b64encode(f"x-access-token:{token}".encode()).decode()
-    q = Queue(Path(a.base) / "queue", f"https://github.com/{a.repo}.git",
-              name="hy3d-worker", email="hy3d-worker@localhost",
+    header = f"http.https://github.com/.extraheader=AUTHORIZATION: basic {auth}"
+    repo_url = f"https://github.com/{a.repo}.git"
+
+    if a.engine == "trellis2":
+        import trellis_engine
+        if a.setup or a.setup_only:
+            trellis_engine.setup(a.base, repo_url, ["-c", header])
+            if a.setup_only:
+                return
+        engine = trellis_engine.TrellisEngine(Path(a.base) / "TRELLIS.2")
+    else:
+        if a.setup or a.setup_only:
+            src = setup(a.base, a.texture)
+            sys.path.insert(0, str(src))
+            if a.setup_only:
+                return
+        engine = Engine()
+
+    q = Queue(Path(a.base) / "queue", repo_url, name="hy3d-worker", email="hy3d-worker@localhost",
               config={"http.https://github.com/.extraheader": f"AUTHORIZATION: basic {auth}"}).ensure()
-    serve(q, Engine(), a.poll, a.heartbeat, once=a.once, update_every=a.update_every,
-          auth_config=["-c", f"http.https://github.com/.extraheader=AUTHORIZATION: basic {auth}"])
+    serve(q, engine, a.poll, a.heartbeat, once=a.once, update_every=a.update_every, auth_config=["-c", header])
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 {
-  "time": "2026-10-30T00:03:30Z",
+  "time": "2026-10-30T00:05:00Z",
   "worker": "7d62784a4464-176",
   "state": "running",
-  "stage": "loading v2"
+  "stage": "generating shape (30 steps, octree 256)"
 }

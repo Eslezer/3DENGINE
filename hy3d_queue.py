@@ -39,6 +39,18 @@ def git(repo, *args, check=True, capture=True):
     return res
 
 
+def has_transparency(image, min_fraction=0.01):
+    """True if a PIL image is really cut out: at least ``min_fraction`` of its pixels are transparent.
+
+    Many PNGs carry an alpha channel that is opaque almost everywhere; treating any alpha < 255
+    as "already cut out" skips background removal and feeds the white background to the model.
+    """
+    if "A" not in image.getbands():
+        return False
+    hist = image.getchannel("A").histogram()
+    return sum(hist[:128]) >= min_fraction * image.width * image.height
+
+
 def now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 

@@ -27,7 +27,7 @@ import time
 import traceback
 from pathlib import Path
 
-from hy3d_queue import Queue, now
+from hy3d_queue import Queue, has_transparency, now
 
 ROOT = Path(__file__).resolve().parent
 HY3D_REPO = "https://github.com/Tencent/Hunyuan3D-2"
@@ -183,8 +183,7 @@ class Engine:
         from hy3dgen.shapegen import DegenerateFaceRemover, FaceReducer, FloaterRemover
 
         image = Image.open(image_path)
-        has_alpha = image.mode in ("RGBA", "LA") and image.getchannel("A").getextrema()[0] < 255
-        if o.get("remove_bg", True) and not has_alpha:
+        if o.get("remove_bg", True) and not has_transparency(image):
             stage("removing background")
             if self.rembg is None:
                 from hy3dgen.rembg import BackgroundRemover

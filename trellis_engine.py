@@ -19,6 +19,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from hy3d_queue import has_transparency
+
 ROOT = Path(__file__).resolve().parent
 TRELLIS_REPO = "https://github.com/microsoft/TRELLIS.2"
 TRELLIS_COMMIT = "75fbf0183001ed9876c8dbb35de6b68552ee08bd"
@@ -247,7 +249,10 @@ class TrellisEngine:
         stage("loading TRELLIS.2" if self.pipe is None else "preparing")
         pipe = self.pipeline()
         stage(f"generating shape + PBR texture ({resolution})")
-        mesh = pipe.run(Image.open(image_path), seed=o.get("seed", 42),
+        image = Image.open(image_path)
+        if not has_transparency(image):
+            image = image.convert("RGB")  # so TRELLIS.2 runs its background remover instead of trusting alpha
+        mesh = pipe.run(image, seed=o.get("seed", 42),
                         pipeline_type=RESOLUTIONS[resolution])[0]
         mesh.simplify(16777216)  # nvdiffrast limit
 
@@ -288,7 +293,7 @@ class TrellisEngine:
         mesh_path = work / "mesh.glb"
         glb.export(mesh_path)  # PNG texture; UltraTex keeps the UVs (uv_mode keep_existing)
         image = Image.open(image_path)
-        if image.mode != "RGBA" or image.getchannel("A").getextrema()[0] == 255:
+        if not has_transparency(image):
             stage("removing background")
             rembg = self.pipeline().rembg_model
             rembg.to("cuda")

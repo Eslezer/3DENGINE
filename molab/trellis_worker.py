@@ -46,7 +46,10 @@ def _(gh_token, hf_token, mo, repo, start):
     import sys
 
     mo.stop(not start.value, mo.md("Fill in both tokens, then press **Start worker**."))
-    mo.stop(not gh_token.value or not hf_token.value, mo.md("**Both tokens are required.**"))
+    # Boxes win; otherwise fall back to GITHUB_TOKEN / HF_TOKEN environment secrets.
+    gh = gh_token.value.strip() or os.environ.get("GITHUB_TOKEN", "").strip()
+    hf = hf_token.value.strip() or os.environ.get("HF_TOKEN", "").strip()
+    mo.stop(not gh or not hf, mo.md("**Both tokens are required** (boxes, or GITHUB_TOKEN / HF_TOKEN secrets)."))
 
     def run(cmd, cwd=None, env=None):
         # Relay output line by line so progress shows up while the cell runs.
@@ -58,8 +61,8 @@ def _(gh_token, hf_token, mo, repo, start):
         if p.wait():
             raise RuntimeError(f"command failed with exit code {p.returncode}")
 
-    env = dict(os.environ, GITHUB_TOKEN=gh_token.value, HF_TOKEN=hf_token.value, HY3D_ENGINE="trellis2")
-    auth = base64.b64encode(f"x-access-token:{gh_token.value}".encode()).decode()
+    env = dict(os.environ, GITHUB_TOKEN=gh, HF_TOKEN=hf, HY3D_ENGINE="trellis2")
+    auth = base64.b64encode(f"x-access-token:{gh}".encode()).decode()
     hdr = ["-c", f"http.extraheader=AUTHORIZATION: basic {auth}"]
     src = "/tmp/hy3d/3DENGINE"
     if os.path.exists(src):

@@ -1,0 +1,36 @@
+Traceback (most recent call last):
+  File "/tmp/hy3d/3DENGINE/ultratex_engine.py", line 255, in run
+    with urllib.request.urlopen(req, timeout=60) as r:
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/urllib/request.py", line 189, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/urllib/request.py", line 495, in open
+    response = meth(req, response)
+  File "/usr/local/lib/python3.13/urllib/request.py", line 604, in http_response
+    response = self.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "/usr/local/lib/python3.13/urllib/request.py", line 533, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/local/lib/python3.13/urllib/request.py", line 466, in _call_chain
+    result = func(*args)
+  File "/usr/local/lib/python3.13/urllib/request.py", line 613, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 400: Bad Request
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/tmp/hy3d/3DENGINE/worker.py", line 301, in serve
+    info = engine.run(image, job.get("options", {}), out, stage)
+  File "/tmp/hy3d/3DENGINE/trellis_engine.py", line 266, in run
+    info["files"] = self.paint_ultratex(glb, image_path, out_path, o, stage)
+                    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hy3d/3DENGINE/trellis_engine.py", line 299, in paint_ultratex
+    debug = self.painter.paint(mesh_path, ref, out_path, Path(out_path).parent.name or "job", o, stage)
+  File "/tmp/hy3d/3DENGINE/ultratex_engine.py", line 305, in paint
+    outputs = self.server.run(workflow(self.names, mesh_glb, ref_name, prefix, o), stage)
+  File "/tmp/hy3d/3DENGINE/ultratex_engine.py", line 258, in run
+    raise RuntimeError(f"ComfyUI rejected the workflow: {e.read().decode(errors='replace')[:3000]}")
+RuntimeError: ComfyUI rejected the workflow: {"error": {"type": "missing_node_type", "message": "Node 'Hy3dPinFront' not found. The custom node may not be installed.", "details": "Node ID '#pin'", "extra_info": {"node_id": "pin", "class_type": "Hy3dPinFront", "node_title": "Hy3dPinFront"}}, "node_errors": {}}

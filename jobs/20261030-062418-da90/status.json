@@ -1,7 +1,14 @@
 {
-  "time": "2026-10-30T06:31:03Z",
+  "time": "2026-10-30T06:36:43Z",
   "worker": "cafaf09f-c863-4bb4-8fe5-234551cb9d41-85p26-985",
   "engine": "trellis2",
-  "state": "running",
-  "stage": "painting with Hunyuan3D-2.1 (PBR)"
+  "state": "done",
+  "vertices": 368426,
+  "faces": 484500,
+  "textured": true,
+  "turned_around": true,
+  "resolution": 1536,
+  "texture_size": 4096,
+  "painter": "hy21",
+  "seconds": 732.1
 }

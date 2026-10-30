@@ -222,6 +222,28 @@ def cmd_reset_queue(a):
     print("queue reset")
 
 
+def cmd_project(a):
+    """Project the job's source image onto the front of its result (see tools/project_front.py)."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        import project_front
+    except ImportError as e:
+        sys.exit(f"project needs: pip install scipy pygltflib pillow ({e})")
+    q = open_queue()
+    job = q.job(a.job)
+    if not job:
+        sys.exit(f"no such job: {a.job}")
+    out_dir = Path(a.out) / a.job
+    glb = out_dir / "result.glb"
+    if not glb.exists():
+        download(q, a.job, a.out)
+    src = out_dir / job["image"]
+    shutil.copyfile(q.dir / "jobs" / a.job / job["image"], src)
+    dst = out_dir / "result_projected.glb"
+    project_front.project(glb, src, dst, edge_px=a.edge)
+    print(dst)
+
+
 def cmd_preview(a):
     try:
         import matplotlib
@@ -319,6 +341,11 @@ def main():
     r = sub.add_parser("reset-queue", help="force-reset the queue branch (frees repo space)")
     r.add_argument("--yes", action="store_true")
 
+    pj = sub.add_parser("project", help="paint the source image onto the front of a finished job's GLB")
+    pj.add_argument("job")
+    pj.add_argument("--out", default=str(OUT_DIR))
+    pj.add_argument("--edge", type=float, default=6, help="fade width in image pixels at the outline")
+
     pv = sub.add_parser("preview", help="render a GLB to a PNG contact sheet")
     pv.add_argument("glb")
     pv.add_argument("--out")
@@ -326,7 +353,8 @@ def main():
 
     a = p.parse_args()
     handler = {"submit": cmd_submit, "wait": cmd_wait, "fetch": cmd_fetch, "status": cmd_status,
-               "clean": cmd_clean, "reset-queue": cmd_reset_queue, "preview": cmd_preview}[a.cmd]
+               "clean": cmd_clean, "reset-queue": cmd_reset_queue, "preview": cmd_preview,
+               "project": cmd_project}[a.cmd]
     sys.exit(handler(a) or 0)
 
 

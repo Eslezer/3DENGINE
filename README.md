@@ -44,6 +44,7 @@ python3 hy3d.py submit cat.png --wait          # shape + texture → outputs/<jo
 python3 hy3d.py submit cat.png --paint turbo --wait          # faster texture
 python3 hy3d.py submit cat.png --no-texture --model v2-turbo --wait   # quick shape-only draft
 python3 hy3d.py preview outputs/<job>/result.glb  # PNG contact sheet (pip install trimesh matplotlib)
+python3 hy3d.py project <job>                  # paint the source image onto the front (pip install scipy pygltflib)
 python3 hy3d.py clean --done                   # remove finished jobs from the queue branch
 python3 hy3d.py reset-queue --yes              # squash queue history to reclaim repo space
 ```
@@ -77,6 +78,7 @@ Rough T4 timings once weights are cached: shape 30 to 90 s, texture another 1 to
 - `trellis_engine.py`: TRELLIS.2 setup and inference; `trellis_compat/`: torch-SDPA stand-in for xformers
 - `molab/trellis_worker.py`: marimo notebook that runs the TRELLIS.2 worker
 - `tools/build_trellis_wheels.sh`: builds the Blackwell extension wheels (no GPU needed)
+- `tools/project_front.py`: projects the source image onto the front-facing part of a GLB's texture, keeping generated texture on the back
 - `tools/render/`: renders close-up PNGs of a GLB with its real textures (three.js in headless Chromium)
 - `hy3d_queue.py`: shared git queue
 - `kaggle/hy3d_worker.ipynb`: notebook that runs the worker

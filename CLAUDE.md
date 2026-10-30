@@ -6,7 +6,8 @@ This repo is a git-backed proxy to an image-to-3D worker running in the user's n
 2. **Check the worker:** `python3 hy3d.py status`. If the heartbeat is older than about 15 min or missing, tell the user to (re)start `molab/trellis_worker.py` on molab (or `kaggle/hy3d_worker.py` on Kaggle). Jobs submitted now are processed once it starts.
 3. **Submit:** `python3 hy3d.py submit <image> --wait` (run it in the background; textured jobs take a few minutes). Shape + texture is the default and produces one GLB with the texture embedded. On trellis2, `--resolution 1536` gives the most detail. On hunyuan, `--paint turbo` gives a faster texture and `--no-texture` gives a shape-only draft. If `status` shows `texture=False`, the notebook was set up without texturing.
 4. **Inspect:** `pip install -q --break-system-packages trimesh matplotlib` once, then `python3 hy3d.py preview outputs/<job>/result.glb` for a quick look. `preview` averages one color per face, so for real texture detail run `npm install` in `tools/render` once and `node tools/render/render.js outputs/<job>/result.glb outputs/<job>/closeups` (views in `tools/render/views.json`). Read the PNGs and say honestly what looks wrong.
-5. **Deliver:** send the user `outputs/<job>/result.glb` plus the preview PNG.
-6. On `error`, read `outputs/<job>/log.txt`. CUDA OOM → retry with `--paint turbo`, a lower `--max-faces`, `--model mini`, or `--no-texture`.
+5. **Project the source art** (front-on images, which is most of them): `pip install -q --break-system-packages scipy pygltflib` once, then `python3 hy3d.py project <job>`, which writes `outputs/<job>/result_projected.glb` with the input image painted onto the front-facing texture. Check its close-ups too (alignment IoU is printed; below ~0.85 the art lands off-target, so deliver the plain result instead).
+6. **Deliver:** send the user `outputs/<job>/result.glb` plus the preview PNG.
+7. On `error`, read `outputs/<job>/log.txt`. CUDA OOM → retry with `--paint turbo`, a lower `--max-faces`, `--model mini`, or `--no-texture`.
 
 `outputs/` and `.hy3d-queue/` are gitignored. Never commit them to `main`. Run `python3 hy3d.py clean --done` now and then.

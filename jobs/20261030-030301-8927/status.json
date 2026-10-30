@@ -1,7 +1,7 @@
 {
-  "time": "2026-10-30T03:04:28Z",
+  "time": "2026-10-30T03:04:41Z",
   "worker": "cafaf09f-c863-4bb4-8fe5-234551cb9d41-85p26-985",
   "engine": "trellis2",
   "state": "running",
-  "stage": "generating shape + PBR texture (1536)"
+  "stage": "baking 4096px texture, 500000 faces max"
 }

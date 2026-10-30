@@ -1,6 +1,9 @@
 {
-  "time": "2026-10-30T00:10:12Z",
+  "time": "2026-10-30T00:10:15Z",
   "worker": "7d62784a4464-176",
-  "state": "running",
-  "stage": "exporting"
+  "state": "done",
+  "vertices": 33074,
+  "faces": 40000,
+  "textured": true,
+  "seconds": 428.9
 }

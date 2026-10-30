@@ -1,7 +1,7 @@
 {
-  "time": "2026-10-30T02:32:20Z",
+  "time": "2026-10-30T02:32:23Z",
   "worker": "cafaf09f-c863-4bb4-8fe5-234551cb9d41-85p26-985",
   "engine": "trellis2",
   "state": "running",
-  "stage": "downloading flux2-vae.safetensors from Comfy-Org/Flux-2-Klein-9B"
+  "stage": "downloading UltraTex flux2/lora/dit_lora.safetensors"
 }

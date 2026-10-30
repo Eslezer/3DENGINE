@@ -1,7 +1,7 @@
 {
-  "time": "2026-10-30T01:49:47Z",
+  "time": "2026-10-30T01:51:35Z",
   "worker": "cafaf09f-c863-4bb4-8fe5-234551cb9d41-85p26-985",
   "engine": "trellis2",
-  "state": "running",
-  "stage": "loading TRELLIS.2"
+  "state": "error",
+  "error": "OSError: You are trying to access a gated repo.\nMake sure to have access to it at https://huggingface.co/briaai/RMBG-2.0.\n403 Client Error. (Request ID: Root=1-6ae3f827-38c3f6a61c0d1f3f02f2610c;e41d54c9-1048-4b08-b48c-3207df3461a9)\n\nCannot access gated repo for url https://huggingface.co/briaai/RMBG-2.0/resolve/main/config.json.\nAccess to model briaai/RMBG-2.0 is restricted and you are not in the authorized list. Visit https://huggingface.co/briaai/RMBG-2.0 to ask for access."
 }

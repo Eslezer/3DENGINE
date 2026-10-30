@@ -223,25 +223,44 @@ class Comfy:
                 raise RuntimeError(f"ComfyUI exited; see {self.dir / 'comfyui.log'}:\n{self.tail()}")
             try:
                 self._get("/system_stats")
-                return
             except (urllib.error.URLError, OSError):
                 time.sleep(1)
+                continue
+            time.sleep(2)  # make sure the server answering is ours, not one that held the port
+            if self.proc.poll() is not None:
+                raise RuntimeError("another process holds ComfyUI's port and could not be stopped:\n" + self.tail())
+            return
         raise RuntimeError("ComfyUI did not start within 5 minutes:\n" + self.tail())
 
     def _kill_stale(self):
-        """A worker that re-exec'd itself after a code update leaves its ComfyUI running (port + VRAM)."""
+        """A worker that re-exec'd itself after a code update leaves its ComfyUI running (port + VRAM).
+
+        Matched by the pid file and, for servers started before it existed, by command line + cwd.
+        """
+        pids = set()
         pidfile = self.dir / "comfyui.pid"
-        if not pidfile.exists():
-            return
         try:
-            pid = int(pidfile.read_text())
-            os.kill(pid, 15)
-            for _ in range(30):
-                os.kill(pid, 0)  # raises once the process is gone
-                time.sleep(1)
-            os.kill(pid, 9)
-        except (ValueError, ProcessLookupError, PermissionError):
+            pids.add(int(pidfile.read_text()))
+        except (OSError, ValueError):
             pass
+        try:
+            import psutil  # a ComfyUI requirement
+            for p in psutil.process_iter(["cmdline", "cwd"]):
+                cmd = p.info.get("cmdline") or []
+                if "main.py" in cmd and str(PORT) in cmd and Path(p.info.get("cwd") or "/") == self.dir:
+                    pids.add(p.pid)
+        except ImportError:
+            pass
+        pids.discard(os.getpid())
+        for pid in pids:
+            try:
+                os.kill(pid, 15)
+                for _ in range(30):
+                    os.kill(pid, 0)  # raises once the process is gone
+                    time.sleep(1)
+                os.kill(pid, 9)
+            except (ProcessLookupError, PermissionError):
+                pass
         pidfile.unlink(missing_ok=True)
 
     def tail(self, n=40):

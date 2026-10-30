@@ -89,7 +89,7 @@ def cmd_submit(a):
         sys.exit(f"unsupported image type {ext}; use one of {sorted(IMAGE_EXTS)}")
     if a.resolution == 1536 and a.painter == "trellis" and not a.no_texture:
         print("warning: --resolution 1536 has produced corrupted TRELLIS.2 textures; use 1024, "
-              "or 1536 together with --painter ultratex")
+              "or 1536 together with --painter ultratex/hy21")
     back = Path(a.back) if a.back else None
     if back and (not back.is_file() or back.suffix.lower() not in IMAGE_EXTS):
         sys.exit(f"bad --back image: {back}")
@@ -326,9 +326,11 @@ def main():
     s.add_argument("--resolution", type=int, choices=[512, 1024, 1536], default=1024,
                    help="trellis2 only: voxel resolution (1536 = most detail, slowest)")
     s.add_argument("--texture-size", type=int, default=4096, help="trellis2 only: texture map size in px")
-    s.add_argument("--painter", choices=["trellis", "ultratex"], default="trellis",
-                   help="trellis2 only: who paints the texture (ultratex = FLUX.2 + UltraTex, non-commercial license)")
-    s.add_argument("--back", help="ultratex only: back view of the same object, pinned to the back")
+    s.add_argument("--painter", choices=["trellis", "ultratex", "hy21"], default="trellis",
+                   help="trellis2 only: who paints the texture (ultratex = FLUX.2 + UltraTex, hy21 = Hunyuan3D-2.1 "
+                        "PBR with lighting removed; both non-commercial licenses)")
+    s.add_argument("--back", help="ultratex/hy21: back view of the same object (ultratex pins it to the back; "
+                                  "hy21 uses it as a second reference)")
     s.add_argument("--no-pin-front", action="store_true",
                    help="ultratex only: let UltraTex repaint the front instead of keeping the reference image there")
     s.add_argument("--no-rembg", action="store_true", help="skip background removal")

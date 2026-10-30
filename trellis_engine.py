@@ -297,11 +297,14 @@ class TrellisEngine:
         if painter == "ultratex":
             info["painter"] = "ultratex"
             info["files"] = self.paint_ultratex(glb, image_path, out_path, o, stage)
+        elif painter == "hy21":
+            info["painter"] = "hy21"
+            info["files"] = self.paint_hy21(glb, image_path, out_path, o, stage)
         elif painter == "trellis":
             stage("exporting")
             glb.export(out_path, extension_webp=True)
         else:
-            raise ValueError(f"unknown painter {painter!r}; use trellis or ultratex")
+            raise ValueError(f"unknown painter {painter!r}; use trellis, ultratex or hy21")
         del mesh, glb
         self.free()
         return info
@@ -330,6 +333,26 @@ class TrellisEngine:
         image.putalpha(image.getchannel("A").point(lambda v: 0 if v < 32 else v))
         image.save(dst)
         return dst
+
+    def paint_hy21(self, glb, image_path, out_path, o, stage):
+        """Repaint TRELLIS.2's mesh with Hunyuan3D-2.1's PBR model; returns {name: path} debug images."""
+        import tempfile
+        import hy21_engine
+
+        stage("setting up Hunyuan3D-2.1 painter")
+        py, src = hy21_engine.setup(self.base, clone)
+        work = Path(tempfile.mkdtemp(prefix="hy21_"))
+        mesh_path = work / "mesh.glb"
+        glb.export(mesh_path)
+        images = [self.cutout(image_path, work / "reference.png", stage)]
+        if o.get("_back_image"):
+            images.append(self.cutout(o["_back_image"], work / "back.png", stage))
+        self.free()
+        hy21_engine.paint(py, src, mesh_path, images, out_path, o, stage, work / "run")
+        files = {"result_debug_reference.png": images[0]}
+        if len(images) > 1:
+            files["result_debug_back_reference.png"] = images[1]
+        return files
 
     def paint_ultratex(self, glb, image_path, out_path, o, stage):
         """Repaint TRELLIS.2's mesh with UltraTex; returns {name: path} debug images to publish."""

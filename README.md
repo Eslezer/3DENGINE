@@ -59,7 +59,7 @@ python3 hy3d.py reset-queue --yes              # squash queue history to reclaim
 | `--paint` | `full` | Hunyuan paint model: `full` (better) or `turbo` (faster) |
 | `--resolution` | 1024 | trellis2: 512, 1024 or 1536. 1536 gives a finer shape but corrupted TRELLIS.2's own texture in testing, so only use it with `--painter ultratex` |
 | `--texture-size` | 4096 | trellis2: texture map size |
-| `--painter` | `trellis` | trellis2: `ultratex` repaints TRELLIS.2's mesh with [UltraTex](https://github.com/visualbruno/ComfyUI-UltraTex) (FLUX.2-Klein base 9B, six 2048 px views, headless ComfyUI). FLUX Non-Commercial License; accept it at [black-forest-labs/FLUX.2-klein-base-9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9B) first. ~25 GB of extra downloads on first use |
+| `--painter` | `trellis` | trellis2: `ultratex` repaints TRELLIS.2's mesh with [UltraTex](https://github.com/visualbruno/ComfyUI-UltraTex) (FLUX.2-Klein base 9B, six 2048 px views, headless ComfyUI). FLUX Non-Commercial License; accept it at [black-forest-labs/FLUX.2-klein-base-9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9B) first. ~25 GB of extra downloads on first use. `hy21` repaints it with [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1)'s PBR texture model (albedo with lighting removed, plus metallic/roughness), in its own venv; mesh decimated to 150k faces first. Tencent Hunyuan Non-Commercial License (not valid in the EU, UK or South Korea). Experimental |
 | `--no-rembg` | off | skip background removal (it is skipped automatically for images that already have transparency) |
 | `--seed`, `--guidance` | 1234, 5.0 | |
 
@@ -76,6 +76,7 @@ Rough T4 timings once weights are cached: shape 30 to 90 s, texture another 1 to
 
 - `hy3d.py`: client CLI (stdlib only; `preview` needs trimesh and matplotlib)
 - `worker.py`: the worker; `--engine hunyuan|trellis2`, `--setup` installs the engine
+- `hy21_engine.py` / `hy21_runner.py`: Hunyuan3D-2.1 painter (separate Python 3.13 venv; prebuilt extensions on the `wheels` branch under `hy21/`)
 - `ultratex_engine.py`: UltraTex painter (installs ComfyUI, downloads models, drives its API); `ultratex_compat/render_nvdr.py`: nvdiffrast fallback for UltraTex's OpenGL renderer on headless GPUs
 - `trellis_engine.py`: TRELLIS.2 setup and inference; `trellis_compat/`: torch-SDPA stand-in for xformers
 - `molab/trellis_worker.py`: marimo notebook that runs the TRELLIS.2 worker

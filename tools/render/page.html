@@ -17,6 +17,9 @@ gltf.scene.traverse(o => {
   o.geometry.deleteAttribute('normal');
   o.geometry.computeVertexNormals();
   const m = o.material; m.metalness = 0; m.roughness = 0.85; m.flatShading = false; m.needsUpdate = true;
+  if (new URLSearchParams(location.search).has('clay')) {  // geometry only: grey, no textures
+    o.material = new THREE.MeshStandardMaterial({ color: 0xbfc4cc, roughness: 0.9, metalness: 0 });
+  }
 });
 scene.add(gltf.scene);
 const box = new THREE.Box3().setFromObject(gltf.scene);

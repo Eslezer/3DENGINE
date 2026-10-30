@@ -1,4 +1,4 @@
-// node render.js <model.glb> <out_dir> [views.json]  (run `npm install` here first)
+// node render.js <model.glb> <out_dir> [views.json]  (run `npm install` here first; CLAY=1 renders untextured geometry)
 // Each view: y/x = target as a fraction of the bounding box, dist = camera distance as a
 // fraction of model height, azim 0 = front (+Z), elev in degrees.
 const { chromium } = require('playwright');
@@ -16,7 +16,7 @@ const views = JSON.parse(fs.readFileSync(viewsJson, 'utf8'));
     const type = file.endsWith('.js') ? 'text/javascript' : file.endsWith('.html') ? 'text/html' : 'application/octet-stream';
     fs.existsSync(file) ? route.fulfill({ body: fs.readFileSync(file), contentType: type }) : route.fulfill({ status: 404 });
   });
-  await page.goto('http://r.local/');
+  await page.goto('http://r.local/' + (process.env.CLAY ? '?clay' : ''));
   await page.waitForFunction('window.ready === true', null, { timeout: 120000 });
   fs.mkdirSync(outDir, { recursive: true });
   for (const v of views) {

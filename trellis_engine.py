@@ -29,7 +29,7 @@ TORCH = ["torch==2.11.0", "torchvision==0.26.0"]
 CUDA_BUILD = ["nvidia-cuda-nvcc==13.0.*", "nvidia-nvvm==13.0.*", "nvidia-cuda-crt==13.0.*",
               "nvidia-cuda-cccl==13.0.*", "ninja", "setuptools", "wheel"]
 DEPS = ["imageio", "imageio-ffmpeg", "tqdm", "easydict", "opencv-python-headless", "trimesh", "transformers>=4.56,<5",
-        "pandas", "zstandard", "kornia", "timm", "plyfile", "numpy", "pillow", "huggingface_hub",
+        "pandas", "zstandard", "kornia", "timm", "plyfile", "numpy", "pillow", "huggingface_hub", "pygltflib", "scipy",
         "utils3d @ git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8"]
 # name -> (git url, ref, clone recursively); refs match the prebuilt wheels
 EXTENSIONS = {
@@ -194,56 +194,26 @@ def use_open_rembg(birefnet_cls):
     birefnet_cls._hy3d_open = True
 
 
-def _grid_colours(rgba, gw=24, gh=48):
-    """Mean colour per cell of the image foreground's bbox, plus pixel counts."""
-    import numpy as np
-    a = rgba[..., 3] > 128
-    ys, xs = np.nonzero(a)
-    crop = rgba[ys.min():ys.max() + 1, xs.min():xs.max() + 1, :3].astype(np.float32)
-    ca = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-    yy, xx = np.nonzero(ca)
-    gi, gj = yy * gh // ca.shape[0], xx * gw // ca.shape[1]
-    acc, cnt = np.zeros((gh, gw, 3)), np.zeros((gh, gw))
-    np.add.at(acc, (gi, gj), crop[yy, xx])
-    np.add.at(cnt, (gi, gj), 1)
-    return acc / np.maximum(cnt, 1)[..., None], cnt
-
-
-def _side_error(verts, vcol, sign, rgba, gw=24, gh=48):
-    """Colour error between the image and the mesh as seen from +Z (sign 1) or -Z (sign -1), on a coarse grid."""
-    import numpy as np
-    img, cnt = _grid_colours(rgba, gw, gh)
-    x, y, z = sign * verts[:, 0], verts[:, 1], sign * verts[:, 2]
-    gi = np.clip(((y.max() - y) / max(np.ptp(y), 1e-9) * gh).astype(int), 0, gh - 1)
-    gj = np.clip(((x - x.min()) / max(np.ptp(x), 1e-9) * gw).astype(int), 0, gw - 1)
-    col, seen = np.zeros((gh, gw, 3)), np.zeros((gh, gw), bool)
-    order = np.argsort(z)  # far to near: the last write per cell is the surface facing that camera
-    col[gi[order], gj[order]] = vcol[order]
-    seen[gi, gj] = True
-    ok = (cnt > 20) & seen
-    return float(np.abs(img[ok] - col[ok]).mean()) if ok.any() else float("inf")
-
-
-def face_front(mesh, front_rgba, margin=0.92):
-    """Turn ``mesh`` 180 degrees about Y if the side matching the front image faces -Z; returns True if turned.
+def face_front(mesh, front_rgba, min_margin=0.03):
+    """Turn ``mesh`` 180 degrees about Y if the side matching the input image faces -Z; returns True if turned.
 
     TRELLIS.2 does not guarantee that the side shown in the input image ends up facing +Z
-    (the front everything downstream assumes). Its own texture is painted from that image, so
-    compare the texture seen from +Z and from -Z with the image on a coarse colour grid
-    (robust to the drawing not matching the mesh exactly); the better match is the front.
-    (A back image is not used: TRELLIS.2's back texture is its own guess, so it adds noise.)
+    (the front UltraTex and the projection tools assume); it sometimes builds the object
+    backwards. The geometric creases it sculpts from the image (seams, cut-outs, facial
+    features) line up with the image's line art on the correct side; see tools/orient_check.py.
     """
     import numpy as np
-    tex = np.asarray(mesh.visual.material.baseColorTexture.convert("RGB")).astype(np.float32)
-    uv = np.asarray(mesh.visual.uv)
-    th, tw = tex.shape[:2]
-    vcol = tex[np.clip(((1 - uv[:, 1]) * (th - 1)).astype(int), 0, th - 1),
-               np.clip((uv[:, 0] * (tw - 1)).astype(int), 0, tw - 1)]
-    verts = np.asarray(mesh.vertices)
-    keep = _side_error(verts, vcol, 1, front_rgba)
-    turn = _side_error(verts, vcol, -1, front_rgba)
-    print(f"orientation check: colour error as generated {keep:.1f}, turned around {turn:.1f}", flush=True)
-    if turn < margin * keep:
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        from orient_check import side_scores
+    except ImportError:  # tools/ needs pygltflib, which workers set up before this check lack
+        pip("pygltflib")
+        from orient_check import side_scores
+
+    s = side_scores(np.asarray(mesh.vertices), np.asarray(mesh.vertex_normals), np.asarray(mesh.faces),
+                    front_rgba[..., :3], mask=front_rgba[..., 3] > 128)
+    print(f"orientation check: line-art match seen from +Z {s[1]:.3f}, from -Z {s[-1]:.3f}", flush=True)
+    if s[-1] - s[1] > min_margin:
         mesh.apply_transform(np.diag([-1.0, 1.0, -1.0, 1.0]))  # 180 degrees about Y
         return True
     return False

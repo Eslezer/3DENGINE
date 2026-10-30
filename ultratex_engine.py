@@ -54,14 +54,27 @@ def setup(base, pip, clone):
     pip(*[l for l in reqs if l and not l.startswith("#") and not SKIP_REQS.match(l)])
     node = clone(ULTRATEX_REPO, ULTRATEX_COMMIT, comfy / "custom_nodes" / "ComfyUI-UltraTex")
     pip("trimesh", "moderngl", "xatlas", "scipy", "modelscope")
-    core = node / "ultratex_core"
-    shutil.copyfile(ROOT / "ultratex_compat" / "render_nvdr.py", core / "render_nvdr.py")
-    render = core / "render.py"
-    sys.path.insert(0, str(ROOT / "ultratex_compat"))
-    from render_nvdr import HOOK
-    if "hy3d:" not in render.read_text():
-        render.write_text(render.read_text() + HOOK)
+    patch_ultratex(comfy)
     return comfy
+
+
+def patch_ultratex(comfy_dir):
+    """Apply this repo's patches to ComfyUI-UltraTex (idempotent; re-run on every painter start).
+
+    Each patch is appended to a module between markers, so updating a patch replaces it.
+    """
+    sys.path.insert(0, str(ROOT / "ultratex_compat"))
+    import prep_patch
+    import render_nvdr
+    core = Path(comfy_dir) / "custom_nodes" / "ComfyUI-UltraTex" / "ultratex_core"
+    shutil.copyfile(ROOT / "ultratex_compat" / "render_nvdr.py", core / "render_nvdr.py")
+    for module, hook in (("render.py", render_nvdr.HOOK), ("prep.py", prep_patch.HOOK)):
+        path = core / module
+        text = path.read_text()
+        start = text.find("\n\n# --- hy3d:")
+        if start >= 0:
+            text = text[:start]
+        path.write_text(text + hook)
 
 
 # -- models ------------------------------------------------------------------------
@@ -307,6 +320,7 @@ class UltraTexPainter:
     def __init__(self, base):
         self.comfy_dir = Path(base) / "ComfyUI"
         install_hy3d_nodes(self.comfy_dir)
+        patch_ultratex(self.comfy_dir)
         self.server = Comfy(self.comfy_dir)
         self.names = None
 

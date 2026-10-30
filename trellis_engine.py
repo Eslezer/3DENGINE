@@ -293,6 +293,9 @@ class TrellisEngine:
             rembg = self.pipeline().rembg_model
             rembg.to("cuda")
             image = rembg(image.convert("RGB"))
+        # Faint alpha far from the object skews UltraTex's reference alignment; drop it.
+        alpha = image.getchannel("A").point(lambda v: 0 if v < 32 else v)
+        image.putalpha(alpha)
         ref = work / "reference.png"
         image.save(ref)
         self.free()

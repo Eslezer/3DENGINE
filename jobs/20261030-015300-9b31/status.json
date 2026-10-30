@@ -1,7 +1,12 @@
 {
-  "time": "2026-10-30T01:57:36Z",
+  "time": "2026-10-30T01:57:45Z",
   "worker": "cafaf09f-c863-4bb4-8fe5-234551cb9d41-85p26-985",
   "engine": "trellis2",
-  "state": "running",
-  "stage": "exporting"
+  "state": "done",
+  "vertices": 403428,
+  "faces": 498273,
+  "textured": true,
+  "resolution": 1536,
+  "texture_size": 4096,
+  "seconds": 277.6
 }

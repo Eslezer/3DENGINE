@@ -171,6 +171,21 @@ def build_extensions(base, trellis_src, names):
         sh([sys.executable, "-m", "pip", "install", "--no-build-isolation", "--no-deps", str(path)], env=env)
 
 
+def use_open_rembg(birefnet_cls):
+    """Swap the gated, non-commercial briaai/RMBG-2.0 for the MIT BiRefNet it is built on."""
+    if getattr(birefnet_cls, "_hy3d_open", False):
+        return
+    orig = birefnet_cls.__init__
+
+    def __init__(self, model_name="ZhengPeng7/BiRefNet", *args, **kw):
+        if model_name == "briaai/RMBG-2.0":
+            model_name = "ZhengPeng7/BiRefNet"
+        orig(self, model_name, *args, **kw)
+
+    birefnet_cls.__init__ = __init__
+    birefnet_cls._hy3d_open = True
+
+
 class TrellisEngine:
     """Lazily loads the TRELLIS.2 image-to-3D pipeline."""
 
@@ -201,7 +216,8 @@ class TrellisEngine:
 
     def pipeline(self):
         if self.pipe is None:
-            from trellis2.pipelines import Trellis2ImageTo3DPipeline
+            from trellis2.pipelines import Trellis2ImageTo3DPipeline, rembg
+            use_open_rembg(rembg.BiRefNet)
             self.pipe = Trellis2ImageTo3DPipeline.from_pretrained(MODEL)
             # Keep every stage resident when the card is big; low_vram shuffles models to CPU per stage.
             vram = self.torch.cuda.get_device_properties(0).total_memory / 2**30

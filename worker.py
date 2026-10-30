@@ -237,12 +237,14 @@ def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_con
         return (job or {}).get("engine") in (None, "any", engine.name)
     gpu = engine.gpu()
     texture = engine.can_texture()
+    code = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
 
     def beat(state):
         # One heartbeat file per engine so a Kaggle and a molab worker can share the queue.
         q.publish({f"worker/heartbeat-{engine.name}.json": json.dumps(
             {"time": now(), "state": state, "gpu": gpu, "host": session, "texture": texture,
-             "engine": engine.name}, indent=2)},
+             "engine": engine.name, "code": code}, indent=2)},
             f"heartbeat {engine.name} {state}", remove=["worker/heartbeat.json"])
 
     def set_status(job_id, **st):

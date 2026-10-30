@@ -183,7 +183,7 @@ def cmd_status(a):
     beats = heartbeats(q)
     for eng, hb in beats.items():
         print(f"worker {eng}: {hb.get('state') if alive(hb) else 'OFFLINE'} (seen {age(hb.get('time'))} ago, "
-              f"gpu={hb.get('gpu')}, texture={hb.get('texture', '?')}, host={hb.get('host')})")
+              f"gpu={hb.get('gpu')}, texture={hb.get('texture', '?')}, code={hb.get('code', '?')})")
     if not beats:
         print("worker: never seen")
     jobs = [a.job] if a.job else q.jobs()[-a.limit:]

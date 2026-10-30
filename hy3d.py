@@ -35,13 +35,49 @@ def open_queue():
     return Queue(QUEUE_DIR, url, name="hy3d-client", email="hy3d-client@localhost").ensure()
 
 
-def age(ts):
+ENGINE_PREFERENCE = ["trellis2", "hunyuan"]  # best first
+ALIVE_SECONDS = 20 * 60  # idle workers heartbeat every 10 min
+
+
+def seconds_ago(ts):
     try:
-        t = time.mktime(time.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")) - time.timezone
+        return time.time() - (time.mktime(time.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")) - time.timezone)
     except (TypeError, ValueError):
+        return None
+
+
+def age(ts):
+    s = seconds_ago(ts)
+    if s is None:
         return "?"
-    s = int(time.time() - t)
+    s = int(s)
     return f"{s}s" if s < 120 else f"{s // 60}m" if s < 7200 else f"{s // 3600}h"
+
+
+def heartbeats(q):
+    """engine name -> latest heartbeat, one file per engine (plus the legacy single file)."""
+    beats = {}
+    root = q.dir / "worker"
+    for p in sorted(root.glob("heartbeat*.json")) if root.exists() else []:
+        hb = q.read_json(f"worker/{p.name}") or {}
+        eng = hb.get("engine", "hunyuan")
+        if eng not in beats or (seconds_ago(hb.get("time")) or 1e9) < (seconds_ago(beats[eng].get("time")) or 1e9):
+            beats[eng] = hb
+    return beats
+
+
+def alive(hb):
+    s = seconds_ago(hb.get("time"))
+    return s is not None and s < ALIVE_SECONDS
+
+
+def pick_engine(requested, beats):
+    if requested != "auto":
+        return requested
+    for eng in ENGINE_PREFERENCE:
+        if eng in beats and alive(beats[eng]):
+            return eng
+    return "any"
 
 
 def cmd_submit(a):
@@ -52,10 +88,13 @@ def cmd_submit(a):
     if ext not in IMAGE_EXTS:
         sys.exit(f"unsupported image type {ext}; use one of {sorted(IMAGE_EXTS)}")
     q = open_queue()
+    beats = heartbeats(q)
+    engine = pick_engine(a.engine, beats)
     job_id = time.strftime("%Y%m%d-%H%M%S-", time.gmtime()) + secrets.token_hex(2)
     job = {
         "id": job_id,
         "created": now(),
+        "engine": engine,
         "image": f"input{ext}",
         "source_name": img.name,
         "options": {
@@ -76,12 +115,14 @@ def cmd_submit(a):
         {f"jobs/{job_id}/job.json": json.dumps(job, indent=2), f"jobs/{job_id}/input{ext}": img},
         f"submit {job_id}",
     )
-    print(f"submitted {job_id}")
-    hb = q.read_json("worker/heartbeat.json")
-    if not hb:
-        print("warning: no worker has ever checked in; start the Kaggle notebook")
+    print(f"submitted {job_id} for engine {engine}")
+    hb = beats.get(engine) if engine != "any" else None
+    if engine == "any":
+        print("warning: no worker is alive; start molab/trellis_worker.py (or the Kaggle notebook)")
+    elif not hb:
+        print(f"warning: no {engine} worker has ever checked in")
     else:
-        print(f"worker last seen {age(hb.get('time'))} ago ({hb.get('state', '?')})")
+        print(f"{engine} worker last seen {age(hb.get('time'))} ago ({hb.get('state', '?')})")
         if not a.no_texture and hb.get("texture") is False:
             print("warning: worker has no texture support (TEXTURE = False in the notebook); "
                   "this job will fail. Resubmit with --no-texture or rerun the notebook with TEXTURE = True")
@@ -139,12 +180,11 @@ def cmd_fetch(a):
 
 def cmd_status(a):
     q = open_queue()
-    hb = q.read_json("worker/heartbeat.json")
-    if hb:
-        print(f"worker: {hb.get('state')} (seen {age(hb.get('time'))} ago, "
-              f"engine={hb.get('engine', 'hunyuan')}, gpu={hb.get('gpu')}, texture={hb.get('texture', '?')}, "
-              f"host={hb.get('host')})")
-    else:
+    beats = heartbeats(q)
+    for eng, hb in beats.items():
+        print(f"worker {eng}: {hb.get('state') if alive(hb) else 'OFFLINE'} (seen {age(hb.get('time'))} ago, "
+              f"gpu={hb.get('gpu')}, texture={hb.get('texture', '?')}, host={hb.get('host')})")
+    if not beats:
         print("worker: never seen")
     jobs = [a.job] if a.job else q.jobs()[-a.limit:]
     for j in jobs:
@@ -238,6 +278,8 @@ def main():
 
     s = sub.add_parser("submit", help="queue an image for 3D generation")
     s.add_argument("image")
+    s.add_argument("--engine", choices=["auto", *ENGINE_PREFERENCE, "any"], default="auto",
+                   help="which worker should take the job (auto = best one currently online)")
     s.add_argument("--model", choices=MODELS, default="v2",
                    help="shape model preset (default v2; turbo variants are ~5x faster)")
     s.add_argument("--steps", type=int, help="diffusion steps (default: 30, or 5 for turbo)")

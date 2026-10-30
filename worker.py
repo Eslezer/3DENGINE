@@ -232,22 +232,28 @@ class Engine:
 
 def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_config=()):
     session = f"{socket.gethostname()}-{os.getpid()}"
+
+    def mine(job):
+        return (job or {}).get("engine") in (None, "any", engine.name)
     gpu = engine.gpu()
     texture = engine.can_texture()
 
     def beat(state):
-        q.publish({"worker/heartbeat.json": json.dumps(
+        # One heartbeat file per engine so a Kaggle and a molab worker can share the queue.
+        q.publish({f"worker/heartbeat-{engine.name}.json": json.dumps(
             {"time": now(), "state": state, "gpu": gpu, "host": session, "texture": texture,
              "engine": engine.name}, indent=2)},
-            f"heartbeat {state}")
+            f"heartbeat {engine.name} {state}", remove=["worker/heartbeat.json"])
 
     def set_status(job_id, **st):
-        q.publish({f"jobs/{job_id}/status.json": json.dumps({"time": now(), "worker": session, **st}, indent=2)},
+        q.publish({f"jobs/{job_id}/status.json": json.dumps(
+            {"time": now(), "worker": session, "engine": engine.name, **st}, indent=2)},
                   f"{job_id}: {st.get('state')} {st.get('stage', '')}".strip())
 
     q.sync()
-    for j in q.jobs():  # re-queue work orphaned by a previous session
-        if (q.status(j) or {}).get("state") in ("claimed", "running"):
+    for j in q.jobs():  # re-queue work orphaned by a previous session of this engine
+        st = q.status(j) or {}
+        if st.get("state") in ("claimed", "running") and st.get("engine", "hunyuan") == engine.name:
             q.publish({}, f"requeue {j}", remove=[f"jobs/{j}/status.json"])
     beat("idle")
     last_beat = last_update = time.time()
@@ -260,7 +266,7 @@ def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_con
             print("sync failed:", e, flush=True)
             time.sleep(poll)
             continue
-        pending = [j for j in q.jobs() if q.status(j) is None]
+        pending = [j for j in q.jobs() if q.status(j) is None and mine(q.job(j))]
         if not pending:
             if once:
                 return
@@ -299,7 +305,7 @@ def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_con
                 q.publish({
                     f"jobs/{job_id}/result.glb": out,
                     f"jobs/{job_id}/status.json": json.dumps(
-                        {"time": now(), "worker": session, "state": "done", **info}, indent=2),
+                        {"time": now(), "worker": session, "engine": engine.name, "state": "done", **info}, indent=2),
                 }, f"{job_id}: done")
                 print(f"   done in {info['seconds']}s: {info}", flush=True)
             except Exception as e:
@@ -308,7 +314,7 @@ def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_con
                 q.publish({
                     f"jobs/{job_id}/log.txt": tb,
                     f"jobs/{job_id}/status.json": json.dumps(
-                        {"time": now(), "worker": session, "state": "error",
+                        {"time": now(), "worker": session, "engine": engine.name, "state": "error",
                          "error": f"{type(e).__name__}: {e}"}, indent=2),
                 }, f"{job_id}: error")
                 engine.free()

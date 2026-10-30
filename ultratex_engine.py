@@ -201,6 +201,7 @@ def workflow(names, mesh_path, ref_name, prefix, o):
         # Debug images: the normal-map views (checks the renderer) and the generated albedo views.
         "save_normals": {"class_type": "SaveImage", "inputs": {"images": ["prep", 1], "filename_prefix": prefix + "_normals"}},
         "save_views": {"class_type": "SaveImage", "inputs": {"images": ["albedo", 2], "filename_prefix": prefix + "_views"}},
+        "save_ref": {"class_type": "SaveImage", "inputs": {"images": ["prep", 2], "filename_prefix": prefix + "_aligned_ref"}},
     }
     if o.get("pin_front", True):
         graph["albedo"]["inputs"].update(init_views=["pin", 0], keep_mask=["pin", 1], denoise=1.0)
@@ -344,7 +345,7 @@ class UltraTexPainter:
             raise RuntimeError(f"UltraTex produced no GLB; outputs: {json.dumps(outputs)[:2000]}")
         shutil.copyfile(glbs[-1], out_glb)
         debug = []
-        for key in ("save_normals", "save_views"):
+        for key in ("save_normals", "save_views", "save_ref"):
             for i in outputs.get(key, {}).get("images", []):
                 debug.append(out_dir / i["subfolder"] / i["filename"])
         return debug

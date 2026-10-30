@@ -300,7 +300,7 @@ class TrellisEngine:
         image.save(ref)
         self.free()
         debug = self.painter.paint(mesh_path, ref, out_path, Path(out_path).parent.name or "job", o, stage)
-        files = {}
+        files = {"result_debug_reference.png": ref}
         for i, p in enumerate(debug):
             im = Image.open(p)
             im.thumbnail((2048, 2048))

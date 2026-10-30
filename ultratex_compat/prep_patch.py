@@ -3,7 +3,7 @@
 UltraTex fits the reference's alpha bounding box (alpha > 8) onto the front silhouette's
 bounding box. Background removers leave faint alpha far from the object and meshes can have
 tiny floaters, so both boxes come out too big and the reference lands shrunken and offset.
-This version measures both boxes on solid pixels (alpha >= 128) and ignores specks.
+This version measures both boxes on solid pixels (alpha >= 204) and ignores specks.
 """
 
 HOOK = '''
@@ -24,7 +24,7 @@ _hy3d_align_reference_orig = align_reference
 
 
 def align_reference(rgba, front_alpha, size, mode):
-    box = _hy3d_solid_bbox(rgba[..., 3] >= 128)
+    box = _hy3d_solid_bbox(rgba[..., 3] >= 204)  # same cut-off TRELLIS.2 uses to crop its input
     if box is None:
         return _hy3d_align_reference_orig(rgba, front_alpha, size, mode)
     x0, y0, x1, y1 = box

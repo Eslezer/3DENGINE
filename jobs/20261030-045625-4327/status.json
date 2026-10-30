@@ -1,6 +1,7 @@
 {
-  "time": "2026-10-30T04:56:30Z",
+  "time": "2026-10-30T04:56:33Z",
   "worker": "cafaf09f-c863-4bb4-8fe5-234551cb9d41-85p26-985",
   "engine": "trellis2",
-  "state": "claimed"
+  "state": "running",
+  "stage": "loading TRELLIS.2"
 }

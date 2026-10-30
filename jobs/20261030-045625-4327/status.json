@@ -1,7 +1,7 @@
 {
-  "time": "2026-10-30T05:00:10Z",
+  "time": "2026-10-30T05:01:12Z",
   "worker": "cafaf09f-c863-4bb4-8fe5-234551cb9d41-85p26-985",
   "engine": "trellis2",
   "state": "running",
-  "stage": "UltraTex painting (FLUX.2 views + bake), front and back pinned"
+  "stage": "UltraTex painting (1 min)"
 }

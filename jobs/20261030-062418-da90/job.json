@@ -1,0 +1,23 @@
+{
+  "id": "20261030-062418-da90",
+  "created": "2026-10-30T06:24:18Z",
+  "engine": "trellis2",
+  "image": "input.png",
+  "source_name": "5e513c15-image.png",
+  "options": {
+    "model": "v2",
+    "steps": null,
+    "octree_resolution": 256,
+    "guidance_scale": 5.0,
+    "seed": 1234,
+    "texture": true,
+    "paint": "full",
+    "max_faces": null,
+    "remove_bg": true,
+    "resolution": 1536,
+    "texture_size": 4096,
+    "painter": "hy21",
+    "pin_front": true
+  },
+  "back_image": "back.png"
+}

@@ -45,6 +45,7 @@ python3 hy3d.py submit cat.png --paint turbo --wait          # faster texture
 python3 hy3d.py submit cat.png --no-texture --model v2-turbo --wait   # quick shape-only draft
 python3 hy3d.py preview outputs/<job>/result.glb  # PNG contact sheet (pip install trimesh matplotlib)
 python3 hy3d.py project <job>                  # paint the source image onto the front (pip install scipy pygltflib)
+python3 tools/remix.py outputs/<job>/result.glb front.png outdir --back back.png   # best finish: sharp drawings on top
 python3 hy3d.py clean --done                   # remove finished jobs from the queue branch
 python3 hy3d.py reset-queue --yes              # squash queue history to reclaim repo space
 ```
@@ -59,7 +60,7 @@ python3 hy3d.py reset-queue --yes              # squash queue history to reclaim
 | `--paint` | `full` | Hunyuan paint model: `full` (better) or `turbo` (faster) |
 | `--resolution` | 1024 | trellis2: 512, 1024 or 1536. 1536 gives a finer shape but corrupted TRELLIS.2's own texture in testing, so only use it with `--painter ultratex` |
 | `--texture-size` | 4096 | trellis2: texture map size |
-| `--painter` | `trellis` | trellis2: `ultratex` repaints TRELLIS.2's mesh with [UltraTex](https://github.com/visualbruno/ComfyUI-UltraTex) (FLUX.2-Klein base 9B, six 2048 px views, headless ComfyUI). FLUX Non-Commercial License; accept it at [black-forest-labs/FLUX.2-klein-base-9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9B) first. ~25 GB of extra downloads on first use. `hy21` repaints it with [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1)'s PBR texture model (albedo with lighting removed, plus metallic/roughness), in its own venv; mesh decimated to 150k faces first. Tencent Hunyuan Non-Commercial License (not valid in the EU, UK or South Korea). Experimental |
+| `--painter` | `trellis` | trellis2: `ultratex` repaints TRELLIS.2's mesh with [UltraTex](https://github.com/visualbruno/ComfyUI-UltraTex) (FLUX.2-Klein base 9B, six 2048 px views, headless ComfyUI). FLUX Non-Commercial License; accept it at [black-forest-labs/FLUX.2-klein-base-9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9B) first. ~25 GB of extra downloads on first use. `hy21` repaints it with [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1)'s PBR texture model (albedo with lighting removed, plus metallic/roughness), in its own venv; mesh decimated to 150k faces first. Tencent Hunyuan Non-Commercial License (not valid in the EU, UK or South Korea). Best combined with `tools/remix.py` |
 | `--no-rembg` | off | skip background removal (it is skipped automatically for images that already have transparency) |
 | `--seed`, `--guidance` | 1234, 5.0 | |
 
@@ -81,6 +82,10 @@ Rough T4 timings once weights are cached: shape 30 to 90 s, texture another 1 to
 - `trellis_engine.py`: TRELLIS.2 setup and inference; `trellis_compat/`: torch-SDPA stand-in for xformers
 - `molab/trellis_worker.py`: marimo notebook that runs the TRELLIS.2 worker
 - `tools/build_trellis_wheels.sh`: builds the Blackwell extension wheels (no GPU needed)
+- `tools/remix.py`: upscales a textured GLB/OBJ (any source, including other tools) and the drawings 4x, projects the front/back drawings over it, keeps its texture on the sides; writes GLB + OBJ zip
+- `tools/upscale.py`: 4x Real-ESRGAN (anime) via spandrel, CPU or GPU
+- `tools/project_views.py`: front + back projection (`--keep-base` keeps the model's texture where the drawings don't reach)
+- `tools/orient_check.py`: front vs back detection used by the TRELLIS.2 orientation fix
 - `tools/project_front.py`: projects the source image onto the front-facing part of a GLB's texture, keeping generated texture on the back
 - `tools/render/`: renders close-up PNGs of a GLB with its real textures (three.js in headless Chromium)
 - `hy3d_queue.py`: shared git queue

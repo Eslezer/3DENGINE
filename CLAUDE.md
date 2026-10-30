@@ -1,13 +1,131 @@
-# Using this repo as a 3D-generation tool
+# 3DENGINE: handoff notes for Claude
 
-This repo is a git-backed proxy to an image-to-3D worker running in the user's notebook (see README.md): TRELLIS.2 on molab (`engine=trellis2`, preferred) or Hunyuan3D-2 on Kaggle (`engine=hunyuan`). `hy3d.py status` shows which one is online. When the user sends an image and wants a 3D model:
+The user sends images in chat (mostly anime characters, often a front and a back view) and wants
+**textured 3D models that are usable off the bat**, with no per-model manual cleanup. They are often on a
+phone. This repo lets a Claude Code cloud session (which cannot reach GPUs or Hugging Face) drive GPU workers
+in notebooks the user runs, through a git queue. Read README.md for setup and option tables; this file is the
+"how we work and what we learned" part.
 
-1. **Get the image onto disk.** Chat attachments usually land in `/mnt/user-data/uploads/`. If the image only appears inline and can't be found on disk, ask the user to attach it as a file.
-2. **Check the worker:** `python3 hy3d.py status`. If the heartbeat is older than about 15 min or missing, tell the user to (re)start `molab/trellis_worker.py` on molab (or `kaggle/hy3d_worker.py` on Kaggle). Jobs submitted now are processed once it starts.
-3. **Submit:** Best quality so far (tested on an anime character): `python3 hy3d.py submit <image> --engine trellis2 --painter ultratex --resolution 1536 --wait`, then step 5's projection on top. If the user has a back view of the same object, add `--back <image>`: UltraTex pins it to the back view the same way it pins the front (much more reliable backs). With pinning (default) the front is already the user's art, so step 5's projection is optional. Alternative worth comparing: `--painter hy21` (Hunyuan3D-2.1 PBR: clean, evenly lit albedo with no baked shading, but blank eyes and a mangled emblem on its own), then `python3 tools/project_views.py outputs/<job>/result.glb <front> outputs/<job>/result_projected.glb --back <back> --keep-base` to put the drawn front and back back on top (tested on the Flash character: the cleanest result so far). UltraTex is FLUX Non-Commercial; if the user says the model is for commercial use, drop `--painter ultratex` (TRELLIS.2's own texture + projection is commercially fine). Generic form: `python3 hy3d.py submit <image> --wait` (run it in the background; textured jobs take a few minutes). Shape + texture is the default and produces one GLB with the texture embedded. On trellis2, `--resolution 1536` gives a finer shape but **corrupts TRELLIS.2's own texture** (dark, blotchy; seen on an anime character), so use it only together with `--painter ultratex`, which repaints everything; with TRELLIS.2's texture keep the default 1024. And `--painter ultratex` repaints with FLUX.2 + UltraTex (non-commercial license; its jobs also return `result_debug_*.png` with the normal-map and generated views, which are worth a look). On hunyuan, `--paint turbo` gives a faster texture and `--no-texture` gives a shape-only draft. If `status` shows `texture=False`, the notebook was set up without texturing.
-4. **Inspect:** `pip install -q --break-system-packages trimesh matplotlib` once, then `python3 hy3d.py preview outputs/<job>/result.glb` for a quick look. `preview` averages one color per face, so for real texture detail run `npm install` in `tools/render` once and `node tools/render/render.js outputs/<job>/result.glb outputs/<job>/closeups` (views in `tools/render/views.json`). Read the PNGs and say honestly what looks wrong.
-5. **Project the source art** (front-on images, which is most of them): `pip install -q --break-system-packages scipy pygltflib` once, then `python3 hy3d.py project <job>`, which writes `outputs/<job>/result_projected.glb` with the input image painted onto the front-facing texture. Check its close-ups too (alignment IoU is printed; below ~0.85 the art lands off-target, so deliver the plain result instead).
-6. **Deliver:** send the user `outputs/<job>/result.glb` plus the preview PNG.
-7. On `error`, read `outputs/<job>/log.txt`. CUDA OOM → retry with `--paint turbo`, a lower `--max-faces`, `--model mini`, or `--no-texture`.
+## Architecture (one paragraph)
 
-`outputs/` and `.hy3d-queue/` are gitignored. Never commit them to `main`. Run `python3 hy3d.py clean --done` now and then.
+`hy3d.py` (client, stdlib only) pushes jobs to the orphan **`queue`** branch (`jobs/<id>/job.json`,
+`input.<ext>`, optional `back.<ext>`). A worker (`worker.py`) in the user's notebook polls that branch, claims
+jobs, pushes `status.json` stages, and finally pushes `result.glb` (+ `result_debug_*.png`), with a heartbeat
+per engine (`worker/heartbeat-<engine>.json`). The worker self-updates from `main` when idle (`git pull
+--ff-only` and re-exec), so **pushing to main deploys code**: wait until `hy3d.py status` shows the new
+`code=<sha>` before submitting a job that needs it. Jobs carry `engine` (`auto`/`trellis2`/`hunyuan`) so two
+workers never take the same job. The **`wheels`** branch holds prebuilt CUDA extensions for Blackwell
+(`sm120/cp311|cp312|cp313/*.whl` for TRELLIS.2, `hy21/sm120/cp313/` for Hunyuan3D-2.1 paint).
+
+Workers:
+- **molab** (marimo, RTX PRO 6000 Blackwell 96 GB): `molab/trellis_worker.py` → `worker.py --engine trellis2`.
+  This is the main one. Tokens go in the notebook's password boxes (GITHUB_TOKEN fine-grained with Contents
+  read/write on this repo; HF_TOKEN with DINOv3 and FLUX.2-klein licences accepted). It keeps running in the
+  background; molab stops it after 12 h or 90 min idle.
+- **Kaggle** (2×T4): `kaggle/hy3d_worker.py` → Hunyuan3D-2 shape + paint. Old and lower quality; rarely used now.
+
+Never ask the user to paste tokens in chat.
+
+## Standard workflow for a new character
+
+1. Find the image(s) on disk: `/mnt/user-data/uploads/` or `/root/.claude/uploads/<session>/`. If an image
+   is only inline, ask for it as a file.
+2. `python3 hy3d.py status`. If the trellis2 heartbeat is older than about 15 min, ask the user to (re)start
+   `molab/trellis_worker.py`. Queued jobs run once it starts.
+3. Generate (in the background, about 6 to 15 min):
+   `python3 hy3d.py submit <front> --back <back> --engine trellis2 --painter hy21 --resolution 1536 --wait`
+4. Put the drawings back on: `python3 tools/remix.py outputs/<job>/result.glb <front> outputs/<job>/remix
+   --back <back> --name <character>`. This upscales the texture and drawings 4x (anime Real-ESRGAN), projects
+   them onto the front- and back-facing surfaces and keeps the painter's texture on the sides. It writes a
+   GLB and a zipped OBJ.
+5. Inspect **close-ups, honestly**: `node tools/render/render.js <glb> <dir>` (run `npm install` in `tools/render`
+   once), then read the PNGs. The user notices close-up problems (chopped fronts, front and back swapped,
+   blotches), so look for them before they do. A side-by-side sheet of variants made with PIL works well.
+6. Deliver with SendUserFile: the GLB, `*_obj.zip` (**the user wants OBJ with its texture**, never an OBJ
+   without one) and a comparison or close-up PNG. Say what is still wrong.
+
+### Ranking of what we tried (Flash character, front + back drawings)
+
+1. **Best:** the user's other tool's model (Hunyuan-2.1-like: clean, de-lit, 150k faces) + `tools/remix.py`
+   with the user's drawings. If the user sends another tool's OBJ + texture, remix it directly. Crisp anime eyes,
+   emblem and suit lines; clean sides. Remaining flaws: the drawing's own shading (pink thigh patches) comes along,
+   red flecks at the face outline, and the emblem stretches on the deep chest curve.
+2. **Our own full pipeline, hy21 + projection:** TRELLIS.2 1536 shape → `--painter hy21` → remix /
+   `project_views --keep-base`. On its own hy21 gives blank white eyes, a mangled emblem, washed-out yellows and
+   sometimes a wrong back; the projection fixes those.
+3. **`--painter ultratex`** (FLUX.2-klein + UltraTex via headless ComfyUI, with front and back pinned):
+   faithful front, but baked-in shading, hip stripes and dark boot bands on the sides.
+4. **`tools/project_views.py`** alone (harmonic fill on the sides): sides go smeary.
+5. **TRELLIS.2's own texture:** usable at `--resolution 1024`; **at 1536 it is corrupted** (dark and
+   blotchy). The client warns about this.
+6. Hunyuan3D-2 on Kaggle: softest.
+
+## Licences (tell the user when relevant)
+
+- Commercial use is fine with TRELLIS.2 (MIT), its own texture, and the projection tools.
+- UltraTex/FLUX.2-klein is FLUX Non-Commercial. Hunyuan3D-2.1 is under the Tencent Hunyuan Non-Commercial
+  licence (not valid in the EU, UK or South Korea).
+- If the user says a model is commercial, use TRELLIS.2 1024 + projection only.
+- Do not help get around a licence.
+
+## Hard-won lessons (do not relearn these)
+
+- **Orientation:** TRELLIS.2 sometimes builds the figure facing −Z. `trellis_engine.face_front` compares the
+  mesh's geometric creases with the drawing's line art from +Z and −Z (`tools/orient_check.py`) and turns it
+  around. Colour-based checks failed. The status shows `turned_around`. Every tool assumes +Y up, front = +Z.
+- **Transparency:** `hy3d_queue.has_transparency` counts an image as cut out only if at least 1% of its pixels
+  have alpha < 128. Many PNGs have a near-opaque alpha channel, and trusting it skipped background removal,
+  which made the front pin shrink.
+- **Alignment:** projections fit the drawing to the mesh silhouette (IoU coordinate descent). IoU ≥ 0.85 is OK,
+  and about 0.9 is typical for good drawings. A "chopped" front came from drawing/mesh mismatch, not from
+  the code.
+- **hy21 paint** runs in its own uv venv (Python 3.13) because it pins diffusers 0.30 and transformers 4.46. Our
+  runner stubs `bpy`, uses spandrel instead of realesrgan/basicsr, and decimates to 150k with fast_simplification
+  instead of its 40k remesh (pymeshlab filters need libOpenGL, which is missing). It also patches upstream so
+  a list of reference images (front, back) works. Its GLB has no NORMAL attribute; project_views computes
+  normals.
+- **TRELLIS.2 on Blackwell:** torch 2.11 cu130 from PyPI; xformers replaced by an SDPA shim
+  (`trellis_compat/`); BiRefNet instead of gated RMBG-2.0; DINOv3 is gated (HF_TOKEN).
+  `tools/build_trellis_wheels.sh` rebuilds the wheels with pip CUDA 13.0 (pin 13.0, add cudart/lib64
+  symlinks and a libcuda stub).
+- **UltraTex:** ComfyUI runs as a subprocess. `_kill_stale` frees the port from old servers. Rendering falls
+  back to nvdiffrast. The `Hy3dPinFront` node pins the front/back views (RePaint keep mask with
+  facing falloff).
+- Don't `pkill -f` patterns that match your own shell. When git pushes to the queue branch race, retry.
+
+## Tools
+
+| file | what |
+|---|---|
+| `hy3d.py` | client: `submit / wait / fetch / status / clean / reset-queue / preview / project` |
+| `worker.py`, `hy3d_queue.py` | worker loop, git queue |
+| `trellis_engine.py` | TRELLIS.2 setup and inference, orientation fix, painters (`trellis`, `ultratex`, `hy21`) |
+| `hy21_engine.py`, `hy21_runner.py` | Hunyuan3D-2.1 PBR painter (separate venv, subprocess) |
+| `ultratex_engine.py`, `ultratex_compat/` | UltraTex via ComfyUI, nvdiffrast renderer, pin node |
+| `tools/remix.py` | **upscale and project the drawings onto any textured GLB/OBJ, keeping its own texture on the sides; GLB + OBJ zip** |
+| `tools/upscale.py` | 4x Real-ESRGAN (anime) via spandrel. Needs `torch` (CPU wheel is fine) + `spandrel` |
+| `tools/project_views.py` | front/back projection; `--keep-base` keeps the model's texture on the sides, otherwise a harmonic fill |
+| `tools/project_front.py` | front-only projection (`hy3d.py project`), GLB helpers, silhouette alignment |
+| `tools/orient_check.py` | front/back detection from creases |
+| `tools/render/` | three.js close-up renderer (`views.json`; `CLAY=1` for untextured) |
+
+Local dependencies for the tools: `pip install -q --break-system-packages trimesh scipy pygltflib pillow
+matplotlib spandrel` and `pip install -q --break-system-packages torch --index-url
+https://download.pytorch.org/whl/cpu`, then `npm install` in `tools/render`. If system pip is awkward, a
+`uv venv` works too.
+
+## Ideas not done yet
+
+- Remove the drawing's shading before projecting (flatten the soft gradients to the base colours), which
+  would fix the pink thigh patches.
+- Locally warp the drawing to the mesh's normal-map edges so details like the emblem stay where they belong
+  on deep curves.
+- Add a 45° view to the projection, or run a second UltraTex pass at 45°.
+- Run remix on the worker (GPU) instead of locally, as a `--remix` job option.
+- Stop idle workers automatically.
+
+## Housekeeping
+
+`outputs/` and `.hy3d-queue/` are gitignored. Never commit them to `main`. Run
+`python3 hy3d.py clean --done` now and then, and `reset-queue --yes` when the repo grows. On a job
+`error`, read `outputs/<job>/log.txt`. For CUDA OOM, use a lower `--max-faces` or `--resolution`.

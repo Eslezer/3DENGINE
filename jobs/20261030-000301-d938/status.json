@@ -1,5 +1,6 @@
 {
-  "time": "2026-10-30T00:03:05Z",
+  "time": "2026-10-30T00:03:30Z",
   "worker": "7d62784a4464-176",
-  "state": "claimed"
+  "state": "running",
+  "stage": "loading v2"
 }

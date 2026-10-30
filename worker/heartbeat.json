@@ -1,8 +1,8 @@
 {
-  "time": "2026-10-30T01:41:54Z",
+  "time": "2026-10-30T01:46:57Z",
   "state": "idle",
-  "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-  "host": "cafaf09f-c863-4bb4-8fe5-234551cb9d41-85p26-985",
+  "gpu": "Tesla T4, Tesla T4",
+  "host": "7d62784a4464-176",
   "texture": true,
-  "engine": "trellis2"
+  "engine": "hunyuan"
 }

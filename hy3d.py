@@ -87,6 +87,9 @@ def cmd_submit(a):
     ext = img.suffix.lower()
     if ext not in IMAGE_EXTS:
         sys.exit(f"unsupported image type {ext}; use one of {sorted(IMAGE_EXTS)}")
+    back = Path(a.back) if a.back else None
+    if back and (not back.is_file() or back.suffix.lower() not in IMAGE_EXTS):
+        sys.exit(f"bad --back image: {back}")
     q = open_queue()
     beats = heartbeats(q)
     engine = pick_engine(a.engine, beats)
@@ -113,10 +116,12 @@ def cmd_submit(a):
             "pin_front": not a.no_pin_front,
         },
     }
-    q.publish(
-        {f"jobs/{job_id}/job.json": json.dumps(job, indent=2), f"jobs/{job_id}/input{ext}": img},
-        f"submit {job_id}",
-    )
+    files = {f"jobs/{job_id}/input{ext}": img}
+    if back:
+        job["back_image"] = f"back{back.suffix.lower()}"
+        files[f"jobs/{job_id}/{job['back_image']}"] = back
+    files[f"jobs/{job_id}/job.json"] = json.dumps(job, indent=2)
+    q.publish(files, f"submit {job_id}")
     print(f"submitted {job_id} for engine {engine}")
     hb = beats.get(engine) if engine != "any" else None
     if engine == "any":
@@ -320,6 +325,7 @@ def main():
     s.add_argument("--texture-size", type=int, default=4096, help="trellis2 only: texture map size in px")
     s.add_argument("--painter", choices=["trellis", "ultratex"], default="trellis",
                    help="trellis2 only: who paints the texture (ultratex = FLUX.2 + UltraTex, non-commercial license)")
+    s.add_argument("--back", help="ultratex only: back view of the same object, pinned to the back")
     s.add_argument("--no-pin-front", action="store_true",
                    help="ultratex only: let UltraTex repaint the front instead of keeping the reference image there")
     s.add_argument("--no-rembg", action="store_true", help="skip background removal")

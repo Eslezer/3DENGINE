@@ -278,6 +278,22 @@ class TrellisEngine:
         self.free()
         return info
 
+    def cutout(self, image_path, dst, stage):
+        """Save ``image_path`` as RGBA with the background removed (unless it is already cut out)."""
+        from PIL import Image
+
+        image = Image.open(image_path)
+        if not has_transparency(image):
+            stage("removing background")
+            rembg = self.pipeline().rembg_model
+            rembg.to("cuda")
+            image = rembg(image.convert("RGB"))
+        image = image.convert("RGBA")
+        # Faint alpha far from the object skews UltraTex's reference alignment; drop it.
+        image.putalpha(image.getchannel("A").point(lambda v: 0 if v < 32 else v))
+        image.save(dst)
+        return dst
+
     def paint_ultratex(self, glb, image_path, out_path, o, stage):
         """Repaint TRELLIS.2's mesh with UltraTex; returns {name: path} debug images to publish."""
         import tempfile
@@ -292,20 +308,13 @@ class TrellisEngine:
         work = Path(tempfile.mkdtemp(prefix="ultratex_"))
         mesh_path = work / "mesh.glb"
         glb.export(mesh_path)  # PNG texture; UltraTex keeps the UVs (uv_mode keep_existing)
-        image = Image.open(image_path)
-        if not has_transparency(image):
-            stage("removing background")
-            rembg = self.pipeline().rembg_model
-            rembg.to("cuda")
-            image = rembg(image.convert("RGB"))
-        # Faint alpha far from the object skews UltraTex's reference alignment; drop it.
-        alpha = image.getchannel("A").point(lambda v: 0 if v < 32 else v)
-        image.putalpha(alpha)
-        ref = work / "reference.png"
-        image.save(ref)
+        ref = self.cutout(image_path, work / "reference.png", stage)
+        back = self.cutout(o["_back_image"], work / "back.png", stage) if o.get("_back_image") else None
         self.free()
-        debug = self.painter.paint(mesh_path, ref, out_path, Path(out_path).parent.name or "job", o, stage)
+        debug = self.painter.paint(mesh_path, ref, out_path, Path(out_path).parent.name or "job", o, stage, back)
         files = {"result_debug_reference.png": ref}
+        if back:
+            files["result_debug_back_reference.png"] = back
         for i, p in enumerate(debug):
             im = Image.open(p)
             im.thumbnail((2048, 2048))

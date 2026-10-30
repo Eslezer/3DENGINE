@@ -166,7 +166,7 @@ def _download_ultratex(src, dst):
 
 # -- workflow ---------------------------------------------------------------------
 
-def workflow(names, mesh_path, ref_name, prefix, o):
+def workflow(names, mesh_path, ref_name, prefix, o, back_name=None):
     """ComfyUI API-format graph: FLUX.2 Klein + UltraTex albedo (2048) and MR (1024) -> bake."""
     seed = int(o.get("seed", 42))
     steps = int(o.get("ultratex_steps") or 25)
@@ -205,6 +205,9 @@ def workflow(names, mesh_path, ref_name, prefix, o):
     }
     if o.get("pin_front", True):
         graph["albedo"]["inputs"].update(init_views=["pin", 0], keep_mask=["pin", 1], denoise=1.0)
+        if back_name:
+            graph["ref_back"] = {"class_type": "LoadImage", "inputs": {"image": back_name}}
+            graph["pin"]["inputs"].update(back_image=["ref_back", 0], back_mask=["ref_back", 1])
     else:
         del graph["pin"]
     return graph
@@ -325,7 +328,7 @@ class UltraTexPainter:
         self.server = Comfy(self.comfy_dir)
         self.names = None
 
-    def paint(self, mesh_glb, ref_rgba, out_glb, job_tag, o, stage):
+    def paint(self, mesh_glb, ref_rgba, out_glb, job_tag, o, stage, back_rgba=None):
         """Texture ``mesh_glb`` from the RGBA reference; writes the GLB and returns debug image paths."""
         if self.names is None:
             self.names = ensure_models(self.comfy_dir, stage)
@@ -334,9 +337,13 @@ class UltraTexPainter:
         inp.mkdir(exist_ok=True)
         ref_name = f"hy3d_{job_tag}.png"
         shutil.copyfile(ref_rgba, inp / ref_name)
+        back_name = None
+        if back_rgba:
+            back_name = f"hy3d_{job_tag}_back.png"
+            shutil.copyfile(back_rgba, inp / back_name)
         prefix = f"hy3d/{job_tag}"
-        stage("UltraTex painting (FLUX.2 views + bake)")
-        outputs = self.server.run(workflow(self.names, mesh_glb, ref_name, prefix, o), stage)
+        stage("UltraTex painting (FLUX.2 views + bake)" + (", front and back pinned" if back_name else ""))
+        outputs = self.server.run(workflow(self.names, mesh_glb, ref_name, prefix, o, back_name), stage)
         out_dir = self.comfy_dir / "output"
         glbs = [out_dir / i["subfolder"] / i["filename"] for i in outputs.get("bake", {}).get("3d", [])]
         if not glbs:

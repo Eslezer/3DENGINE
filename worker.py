@@ -290,6 +290,11 @@ def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_con
         with tempfile.TemporaryDirectory() as tmp:
             image = Path(tmp) / job["image"]
             image.write_bytes((q.dir / "jobs" / job_id / job["image"]).read_bytes())
+            options = dict(job.get("options", {}))
+            if job.get("back_image"):  # optional back view of the object
+                back = Path(tmp) / job["back_image"]
+                back.write_bytes((q.dir / "jobs" / job_id / job["back_image"]).read_bytes())
+                options["_back_image"] = str(back)
             out = Path(tmp) / "result.glb"
 
             def stage(msg):
@@ -297,7 +302,7 @@ def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_con
                 set_status(job_id, state="running", stage=msg)
 
             try:
-                info = engine.run(image, job.get("options", {}), out, stage)
+                info = engine.run(image, options, out, stage)
                 extra = info.pop("files", {})
                 info["seconds"] = round(time.time() - started, 1)
                 size = out.stat().st_size

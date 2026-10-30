@@ -1,7 +1,14 @@
 {
-  "time": "2026-10-30T05:03:16Z",
+  "time": "2026-10-30T05:03:22Z",
   "worker": "cafaf09f-c863-4bb4-8fe5-234551cb9d41-85p26-985",
   "engine": "trellis2",
-  "state": "running",
-  "stage": "UltraTex painting (3 min)"
+  "state": "done",
+  "vertices": 372107,
+  "faces": 485066,
+  "textured": true,
+  "turned_around": false,
+  "resolution": 1536,
+  "texture_size": 4096,
+  "painter": "ultratex",
+  "seconds": 410.0
 }

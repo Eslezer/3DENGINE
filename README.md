@@ -59,6 +59,7 @@ python3 hy3d.py reset-queue --yes              # squash queue history to reclaim
 | `--paint` | `full` | Hunyuan paint model: `full` (better) or `turbo` (faster) |
 | `--resolution` | 1024 | trellis2: 512, 1024 or 1536 (most detail) |
 | `--texture-size` | 4096 | trellis2: texture map size |
+| `--painter` | `trellis` | trellis2: `ultratex` repaints TRELLIS.2's mesh with [UltraTex](https://github.com/visualbruno/ComfyUI-UltraTex) (FLUX.2-Klein base 9B, six 2048 px views, headless ComfyUI). FLUX Non-Commercial License; accept it at [black-forest-labs/FLUX.2-klein-base-9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9B) first. ~25 GB of extra downloads on first use |
 | `--no-rembg` | off | skip background removal (it is skipped automatically for images that already have transparency) |
 | `--seed`, `--guidance` | 1234, 5.0 | |
 
@@ -75,6 +76,7 @@ Rough T4 timings once weights are cached: shape 30 to 90 s, texture another 1 to
 
 - `hy3d.py`: client CLI (stdlib only; `preview` needs trimesh and matplotlib)
 - `worker.py`: the worker; `--engine hunyuan|trellis2`, `--setup` installs the engine
+- `ultratex_engine.py`: UltraTex painter (installs ComfyUI, downloads models, drives its API); `ultratex_compat/render_nvdr.py`: nvdiffrast fallback for UltraTex's OpenGL renderer on headless GPUs
 - `trellis_engine.py`: TRELLIS.2 setup and inference; `trellis_compat/`: torch-SDPA stand-in for xformers
 - `molab/trellis_worker.py`: marimo notebook that runs the TRELLIS.2 worker
 - `tools/build_trellis_wheels.sh`: builds the Blackwell extension wheels (no GPU needed)

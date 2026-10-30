@@ -299,12 +299,14 @@ def serve(q, engine, poll, heartbeat_every, once=False, update_every=0, auth_con
 
             try:
                 info = engine.run(image, job.get("options", {}), out, stage)
+                extra = info.pop("files", {})
                 info["seconds"] = round(time.time() - started, 1)
                 size = out.stat().st_size
                 if size > 95 * 1024 * 1024:
                     raise RuntimeError(f"result is {size >> 20} MB, over GitHub's 100 MB limit; "
                                        "lower max_faces or skip texture")
                 q.publish({
+                    **{f"jobs/{job_id}/{name}": path for name, path in extra.items()},
                     f"jobs/{job_id}/result.glb": out,
                     f"jobs/{job_id}/status.json": json.dumps(
                         {"time": now(), "worker": session, "engine": engine.name, "state": "done", **info}, indent=2),
@@ -355,7 +357,7 @@ def main():
             trellis_engine.setup(a.base, repo_url, ["-c", header])
             if a.setup_only:
                 return
-        engine = trellis_engine.TrellisEngine(Path(a.base) / "TRELLIS.2")
+        engine = trellis_engine.TrellisEngine(Path(a.base) / "TRELLIS.2", a.base)
     else:
         if a.setup or a.setup_only:
             src = setup(a.base, a.texture)

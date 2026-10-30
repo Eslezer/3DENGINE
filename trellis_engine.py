@@ -112,6 +112,12 @@ def setup(base, repo_url, auth_config=()):
     if still:
         raise SystemExit(f"TRELLIS.2 extensions failed to install: {still}")
     print("TRELLIS.2 ready", flush=True)
+    try:  # optional painter; TRELLIS.2 works without it
+        import ultratex_engine
+        ultratex_engine.setup(base, pip, clone)
+        print("UltraTex (ComfyUI) installed; models download on the first painter=ultratex job", flush=True)
+    except Exception as e:
+        print(f"UltraTex setup failed, painter=ultratex will be unavailable: {e}", flush=True)
     return src
 
 
@@ -191,7 +197,7 @@ class TrellisEngine:
 
     name = "trellis2"
 
-    def __init__(self, src):
+    def __init__(self, src, base=None):
         os.environ.setdefault("ATTN_BACKEND", "xformers")  # served by trellis_compat/xformers (torch SDPA)
         os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
         os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
@@ -201,6 +207,8 @@ class TrellisEngine:
         import torch
         self.torch = torch
         self.pipe = None
+        self.base = Path(base) if base else Path(src).parent
+        self.painter = None
 
     def gpu(self):
         t = self.torch
@@ -250,10 +258,50 @@ class TrellisEngine:
             decimation_target=max_faces, texture_size=texture_size,
             remesh=True, remesh_band=1, remesh_project=0, verbose=False,
         )
-        stage("exporting")
-        glb.export(out_path, extension_webp=True)
         info = {"vertices": int(len(glb.vertices)), "faces": int(len(glb.faces)), "textured": True,
                 "engine": self.name, "resolution": resolution, "texture_size": texture_size}
+        painter = o.get("painter") or "trellis"
+        if painter == "ultratex":
+            info["painter"] = "ultratex"
+            info["files"] = self.paint_ultratex(glb, image_path, out_path, o, stage)
+        elif painter == "trellis":
+            stage("exporting")
+            glb.export(out_path, extension_webp=True)
+        else:
+            raise ValueError(f"unknown painter {painter!r}; use trellis or ultratex")
         del mesh, glb
         self.free()
         return info
+
+    def paint_ultratex(self, glb, image_path, out_path, o, stage):
+        """Repaint TRELLIS.2's mesh with UltraTex; returns {name: path} debug images to publish."""
+        import tempfile
+        import ultratex_engine
+        from PIL import Image
+
+        if self.painter is None:
+            if not (self.base / "ComfyUI" / "custom_nodes" / "ComfyUI-UltraTex").exists():
+                stage("installing ComfyUI + UltraTex")  # workers set up before the painter existed
+                ultratex_engine.setup(self.base, pip, clone)
+            self.painter = ultratex_engine.UltraTexPainter(self.base)
+        work = Path(tempfile.mkdtemp(prefix="ultratex_"))
+        mesh_path = work / "mesh.glb"
+        glb.export(mesh_path)  # PNG texture; UltraTex keeps the UVs (uv_mode keep_existing)
+        image = Image.open(image_path)
+        if image.mode != "RGBA" or image.getchannel("A").getextrema()[0] == 255:
+            stage("removing background")
+            rembg = self.pipeline().rembg_model
+            rembg.to("cuda")
+            image = rembg(image.convert("RGB"))
+        ref = work / "reference.png"
+        image.save(ref)
+        self.free()
+        debug = self.painter.paint(mesh_path, ref, out_path, Path(out_path).parent.name or "job", o, stage)
+        files = {}
+        for i, p in enumerate(debug):
+            im = Image.open(p)
+            im.thumbnail((2048, 2048))
+            dst = work / f"result_debug_{i}.png"
+            im.save(dst)
+            files[dst.name] = dst
+        return files

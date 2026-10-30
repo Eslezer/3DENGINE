@@ -1,7 +1,7 @@
 {
-  "time": "2026-10-30T02:32:23Z",
+  "time": "2026-10-30T02:32:42Z",
   "worker": "cafaf09f-c863-4bb4-8fe5-234551cb9d41-85p26-985",
   "engine": "trellis2",
   "state": "running",
-  "stage": "downloading UltraTex flux2/lora/dit_lora.safetensors"
+  "stage": "downloading UltraTex flux2_mr/lora/dit_lora.safetensors"
 }

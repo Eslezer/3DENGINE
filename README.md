@@ -57,7 +57,7 @@ python3 hy3d.py reset-queue --yes              # squash queue history to reclaim
 | `--max-faces` | 40k hunyuan / 500k trellis2 | decimation target; 0 keeps the full mesh |
 | `--no-texture` | texture on | skip Hunyuan texture painting |
 | `--paint` | `full` | Hunyuan paint model: `full` (better) or `turbo` (faster) |
-| `--resolution` | 1024 | trellis2: 512, 1024 or 1536 (most detail) |
+| `--resolution` | 1024 | trellis2: 512, 1024 or 1536. 1536 gives a finer shape but corrupted TRELLIS.2's own texture in testing, so only use it with `--painter ultratex` |
 | `--texture-size` | 4096 | trellis2: texture map size |
 | `--painter` | `trellis` | trellis2: `ultratex` repaints TRELLIS.2's mesh with [UltraTex](https://github.com/visualbruno/ComfyUI-UltraTex) (FLUX.2-Klein base 9B, six 2048 px views, headless ComfyUI). FLUX Non-Commercial License; accept it at [black-forest-labs/FLUX.2-klein-base-9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9B) first. ~25 GB of extra downloads on first use |
 | `--no-rembg` | off | skip background removal (it is skipped automatically for images that already have transparency) |

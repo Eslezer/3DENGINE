@@ -87,6 +87,9 @@ def cmd_submit(a):
     ext = img.suffix.lower()
     if ext not in IMAGE_EXTS:
         sys.exit(f"unsupported image type {ext}; use one of {sorted(IMAGE_EXTS)}")
+    if a.resolution == 1536 and a.painter == "trellis" and not a.no_texture:
+        print("warning: --resolution 1536 has produced corrupted TRELLIS.2 textures; use 1024, "
+              "or 1536 together with --painter ultratex")
     back = Path(a.back) if a.back else None
     if back and (not back.is_file() or back.suffix.lower() not in IMAGE_EXTS):
         sys.exit(f"bad --back image: {back}")

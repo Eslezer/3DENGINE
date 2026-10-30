@@ -1,7 +1,7 @@
 {
-  "time": "2026-10-30T06:28:33Z",
+  "time": "2026-10-30T06:28:42Z",
   "worker": "cafaf09f-c863-4bb4-8fe5-234551cb9d41-85p26-985",
   "engine": "trellis2",
   "state": "running",
-  "stage": "checking orientation"
+  "stage": "setting up Hunyuan3D-2.1 painter"
 }

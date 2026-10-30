@@ -7,7 +7,7 @@
    project_front.py; the back camera sees the model mirrored in x).
 2. Every texel the camera sees (depth-tested) takes the image's colour, weighted by how
    directly the surface faces that camera and faded near the outline.
-3. Surfaces neither image covers well (sides, top of the shoulders, soles) are filled by a
+3. Surfaces neither image covers well (or with --keep-base, keep the GLB's own texture there) (sides, top of the shoulders, soles) are filled by a
    harmonic interpolation over the mesh surface from the projected colours: smooth, and
    continuous across UV seams because duplicated seam vertices are welded for the solve.
 
@@ -127,13 +127,20 @@ def harmonic_fill(pos, faces, color, known):
     return out[inverse]
 
 
-def project_views(glb_in, front, glb_out, back=None, debug=None, edge_px=6, gutter_px=4):
+def project_views(glb_in, front, glb_out, back=None, debug=None, edge_px=6, gutter_px=4, keep_base=False):
+    """``keep_base``: where the images don't reach, keep the GLB's own texture instead of the fill."""
     g, blob = load(glb_in)
     prim = g.meshes[0].primitives[0]
     pos = accessor(g, blob, prim.attributes.POSITION).astype(np.float64)
-    nrm = accessor(g, blob, prim.attributes.NORMAL).astype(np.float64)
     uv = accessor(g, blob, prim.attributes.TEXCOORD_0).astype(np.float64)
     faces = accessor(g, blob, prim.indices).reshape(-1, 3).astype(np.int64)
+    if prim.attributes.NORMAL is not None:
+        nrm = accessor(g, blob, prim.attributes.NORMAL).astype(np.float64)
+    else:  # area-weighted vertex normals
+        fn = np.cross(pos[faces[:, 1]] - pos[faces[:, 0]], pos[faces[:, 2]] - pos[faces[:, 0]])
+        nrm = np.zeros_like(pos)
+        for k in range(3):
+            np.add.at(nrm, faces[:, k], fn)
     nrm /= np.linalg.norm(nrm, axis=1, keepdims=True) + 1e-12
 
     mat = g.materials[prim.material]
@@ -146,11 +153,13 @@ def project_views(glb_in, front, glb_out, back=None, debug=None, edge_px=6, gutt
     if back:
         views.append(View(back, pos, faces, back=True, edge_px=edge_px))
 
-    # Side fill: per-vertex colours from the views, extended over the surface.
-    vcol, vw = combine(views, pos, nrm)
-    known = vw >= SEED_WEIGHT
-    print(f"fill seeds: {100 * known.mean():.0f}% of vertices covered by the images")
-    fill = harmonic_fill(pos, faces, vcol, known)
+    if keep_base:
+        fill = np.full((len(pos), 3), np.nan)
+    else:  # side fill: per-vertex colours from the views, extended over the surface
+        vcol, vw = combine(views, pos, nrm)
+        known = vw >= SEED_WEIGHT
+        print(f"fill seeds: {100 * known.mean():.0f}% of vertices covered by the images")
+        fill = harmonic_fill(pos, faces, vcol, known)
     unfilled = np.isnan(fill[:, 0])
 
     # Per texel: image colour where the views see it, the fill elsewhere, the old texture as a last resort.
@@ -203,8 +212,10 @@ def main():
     p.add_argument("--back")
     p.add_argument("--debug")
     p.add_argument("--edge", type=float, default=6, help="fade width in image pixels at the outline")
+    p.add_argument("--keep-base", action="store_true",
+                   help="keep the GLB's own texture where the images don't reach (e.g. on top of an AI painter)")
     a = p.parse_args()
-    project_views(a.glb, a.front, a.out, a.back, a.debug, edge_px=a.edge)
+    project_views(a.glb, a.front, a.out, a.back, a.debug, edge_px=a.edge, keep_base=a.keep_base)
 
 
 if __name__ == "__main__":

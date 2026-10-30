@@ -1,0 +1,36 @@
+<!doctype html><html><body style="margin:0;background:#fff">
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const W = 900, H = 900;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H); renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setClearColor(0xf2f2f2);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0xd8d8d8, 2.6));
+const key = new THREE.DirectionalLight(0xffffff, 1.2); scene.add(key);
+const gltf = await new GLTFLoader().loadAsync('/model.glb');
+gltf.scene.traverse(o => {
+  if (!o.isMesh) return;
+  o.geometry.deleteAttribute('normal');
+  o.geometry.computeVertexNormals();
+  const m = o.material; m.metalness = 0; m.roughness = 0.85; m.flatShading = false; m.needsUpdate = true;
+});
+scene.add(gltf.scene);
+const box = new THREE.Box3().setFromObject(gltf.scene);
+const size = box.getSize(new THREE.Vector3());
+window.renderView = ({ y, x = 0.5, dist, azim, elev = 0, fov = 30 }) => {
+  // y/x: target as fraction of bbox; dist: camera distance as fraction of height; azim 0 = front (+Z)
+  const t = new THREE.Vector3(box.min.x + x * size.x, box.min.y + y * size.y, (box.min.z + box.max.z) / 2);
+  const a = THREE.MathUtils.degToRad(azim), e = THREE.MathUtils.degToRad(elev), d = dist * size.y;
+  const cam = new THREE.PerspectiveCamera(fov, W / H, 0.001 * size.y, 100 * size.y);
+  cam.position.set(t.x + d * Math.sin(a) * Math.cos(e), t.y + d * Math.sin(e), t.z + d * Math.cos(a) * Math.cos(e));
+  cam.lookAt(t);
+  key.position.copy(cam.position).add(new THREE.Vector3(0, size.y, 0));
+  renderer.render(scene, cam);
+  return renderer.domElement.toDataURL('image/png');
+};
+window.ready = true;
+</script></body></html>

@@ -1,0 +1,6 @@
+{
+  "name": "hy3d-render",
+  "private": true,
+  "description": "Renders GLB close-ups with three.js in headless Chromium (Playwright).",
+  "dependencies": { "three": "0.169.0" }
+}

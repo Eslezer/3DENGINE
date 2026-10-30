@@ -1,0 +1,8 @@
+[{"name": "01_full_front", "y": 0.5, "dist": 2.1, "azim": 0},
+ {"name": "02_full_back", "y": 0.5, "dist": 2.1, "azim": 180},
+ {"name": "03_face", "y": 0.87, "dist": 0.55, "azim": 0},
+ {"name": "04_face_3q", "y": 0.87, "dist": 0.55, "azim": 35, "elev": 5},
+ {"name": "05_torso", "y": 0.7, "dist": 0.6, "azim": 0},
+ {"name": "06_legs", "y": 0.3, "dist": 0.85, "azim": 0},
+ {"name": "07_boots", "y": 0.1, "dist": 0.75, "azim": 0, "elev": 8},
+ {"name": "08_hair_back", "y": 0.78, "dist": 0.6, "azim": 180}]

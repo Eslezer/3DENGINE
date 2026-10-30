@@ -1,0 +1,4 @@
+.hy3d-queue/
+outputs/
+__pycache__/
+*.preview.png

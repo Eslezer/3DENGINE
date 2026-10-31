@@ -1,0 +1,93 @@
+Traceback (most recent call last):
+  File "/tmp/hy3d/3DENGINE/worker.py", line 305, in serve
+    info = engine.run(image, options, out, stage)
+  File "/tmp/hy3d/3DENGINE/trellis_engine.py", line 319, in run
+    glb, front_rgba = self.run_pixal(image_path, o, stage, resolution, max_faces, texture_size)
+                      ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hy3d/3DENGINE/trellis_engine.py", line 385, in run_pixal
+    sh_tail(cmd, env=dict(os.environ, PYTHONPATH=""))
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hy3d/3DENGINE/trellis_engine.py", line 68, in sh_tail
+    raise RuntimeError(f"{Path(str(cmd[1])).name} failed (exit {proc.returncode}); last output:\n" + "".join(tail))
+RuntimeError: pixal_runner.py failed (exit 1); last output:
+        return_lse=has_additional_attention,
+    )
+  File "/tmp/uv-venv/lib/python3.13/site-packages/natten/backends/flex.py", line 602, in flex_fna_generic
+    na_block_mask = get_na_flex_mask(
+        device=query.device.type,
+    ...<11 lines>...
+        torch_compile=torch_compile,
+    )
+  File "/tmp/uv-venv/lib/python3.13/site-packages/natten/backends/flex.py", line 493, in get_na_flex_mask
+    block_mask = create_block_mask(
+        mask_mod,
+    ...<6 lines>...
+        device=device,
+    )
+  File "/usr/local/lib/python3.13/site-packages/torch/nn/attention/flex_attention.py", line 1275, in create_block_mask
+    mask_tensor = create_mask(mask_mod, B, H, Q_LEN, KV_LEN, device)
+  File "/usr/local/lib/python3.13/site-packages/torch/nn/attention/flex_attention.py", line 1201, in create_mask
+    mask = mask_mod(b, h, m, n)
+  File "/usr/local/lib/python3.13/site-packages/torch/_functorch/apis.py", line 220, in wrapped
+    return vmap_impl(
+        # pyrefly: ignore[bad-argument-type]
+    ...<6 lines>...
+        **kwargs,
+    )
+  File "/usr/local/lib/python3.13/site-packages/torch/_functorch/vmap.py", line 316, in vmap_impl
+    return _flat_vmap(
+        func,
+    ...<6 lines>...
+        **kwargs,
+    )
+  File "/usr/local/lib/python3.13/site-packages/torch/_functorch/vmap.py", line 507, in _flat_vmap
+    batched_outputs = func(*batched_inputs, **kwargs)
+  File "/usr/local/lib/python3.13/site-packages/torch/_functorch/apis.py", line 220, in wrapped
+    return vmap_impl(
+        # pyrefly: ignore[bad-argument-type]
+    ...<6 lines>...
+        **kwargs,
+    )
+  File "/usr/local/lib/python3.13/site-packages/torch/_functorch/vmap.py", line 316, in vmap_impl
+    return _flat_vmap(
+        func,
+    ...<6 lines>...
+        **kwargs,
+    )
+  File "/usr/local/lib/python3.13/site-packages/torch/_functorch/vmap.py", line 507, in _flat_vmap
+    batched_outputs = func(*batched_inputs, **kwargs)
+  File "/usr/local/lib/python3.13/site-packages/torch/_functorch/apis.py", line 220, in wrapped
+    return vmap_impl(
+        # pyrefly: ignore[bad-argument-type]
+    ...<6 lines>...
+        **kwargs,
+    )
+  File "/usr/local/lib/python3.13/site-packages/torch/_functorch/vmap.py", line 316, in vmap_impl
+    return _flat_vmap(
+        func,
+    ...<6 lines>...
+        **kwargs,
+    )
+  File "/usr/local/lib/python3.13/site-packages/torch/_functorch/vmap.py", line 507, in _flat_vmap
+    batched_outputs = func(*batched_inputs, **kwargs)
+  File "/usr/local/lib/python3.13/site-packages/torch/_functorch/apis.py", line 220, in wrapped
+    return vmap_impl(
+        # pyrefly: ignore[bad-argument-type]
+    ...<6 lines>...
+        **kwargs,
+    )
+  File "/usr/local/lib/python3.13/site-packages/torch/_functorch/vmap.py", line 316, in vmap_impl
+    return _flat_vmap(
+        func,
+    ...<6 lines>...
+        **kwargs,
+    )
+  File "/usr/local/lib/python3.13/site-packages/torch/_functorch/vmap.py", line 507, in _flat_vmap
+    batched_outputs = func(*batched_inputs, **kwargs)
+  File "/tmp/uv-venv/lib/python3.13/site-packages/natten/backends/flex.py", line 353, in single_dim_tiling_mask
+    w0 = window_center - kv_crd_di[i]
+         ~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+  File "/usr/local/lib/python3.13/site-packages/torch/_dynamo/_trace_wrapped_higher_order_op.py", line 158, in __torch_function__
+    return func(*args, **(kwargs or {}))
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 512.00 GiB. GPU 0 has a total capacity of 94.97 GiB of which 74.63 GiB is free. Process 1 has 20.34 GiB memory in use. Of the allocated memory 19.59 GiB is allocated by PyTorch, and 26.03 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)
+

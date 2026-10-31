@@ -123,4 +123,5 @@ def paint(py, src, mesh_path, images, out_path, o, stage, work):
         cmd += ["--image", im]
     env = dict(os.environ, PYTHONNOUSERSITE="1")
     env.pop("PYTHONPATH", None)
-    sh(cmd, env=env)
+    from trellis_engine import sh_tail
+    sh_tail(cmd, env=env)

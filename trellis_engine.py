@@ -54,6 +54,20 @@ def sh(cmd, cwd=None, env=None):
     subprocess.run(list(map(str, cmd)), check=True, cwd=cwd, env=env)
 
 
+def sh_tail(cmd, env=None, keep=80):
+    """Like sh(), streaming output, but a failure raises with the last ``keep`` lines (they reach log.txt)."""
+    import collections
+    print("+", " ".join(map(str, cmd)), flush=True)
+    tail = collections.deque(maxlen=keep)
+    proc = subprocess.Popen(list(map(str, cmd)), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, errors="replace")
+    for line in proc.stdout:
+        print(line, end="", flush=True)
+        tail.append(line)
+    if proc.wait():
+        raise RuntimeError(f"{Path(str(cmd[1])).name} failed (exit {proc.returncode}); last output:\n" + "".join(tail))
+
+
 def pip(*args):
     """pip into this interpreter; falls back to uv for pip-less (uv-managed) environments."""
     if subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True).returncode == 0:
@@ -368,7 +382,7 @@ class TrellisEngine:
             cmd += ["--back", back]
         if o.get("pixal_fov") is not None:
             cmd += ["--fov", o["pixal_fov"]]
-        sh(cmd, env=dict(os.environ, PYTHONPATH=""))
+        sh_tail(cmd, env=dict(os.environ, PYTHONPATH=""))
         front = np.asarray(Image.open(work / "cutout_0.png").convert("RGBA"))
         return trimesh.load(raw, force="mesh", process=False), front
 

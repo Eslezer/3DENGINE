@@ -42,6 +42,11 @@ EXTENSIONS = {
 EXT_MODULES = {"nvdiffrast": "nvdiffrast.torch", "nvdiffrec": "nvdiffrec_render.renderutils", "FlexGEMM": "flex_gemm",
                "CuMesh": "cumesh", "o-voxel": "o_voxel"}
 RESOLUTIONS = {512: "512", 1024: "1024_cascade", 1536: "1536_cascade"}
+# Pixal3D (generator=pixal3d): TRELLIS.2-based, pixel-aligned to the input image; MIT.
+PIXAL_REPO = "https://github.com/TencentARC/Pixal3D"
+PIXAL_COMMIT = "f7cf38429b0bd264f1995f0f8743a88b1c728b94"
+MOGE = "git+https://github.com/microsoft/MoGe.git@74fbce054ebed49800de42d0ad0e83495065719a"
+NATTEN = "natten==0.21.0"
 
 
 def sh(cmd, cwd=None, env=None):
@@ -120,6 +125,27 @@ def setup(base, repo_url, auth_config=()):
         print("UltraTex (ComfyUI) installed; models download on the first painter=ultratex job", flush=True)
     except Exception as e:
         print(f"UltraTex setup failed, painter=ultratex will be unavailable: {e}", flush=True)
+    return src
+
+
+def setup_pixal(base):
+    """Clone Pixal3D and add its extra packages to this (TRELLIS.2) environment; returns the checkout."""
+    base = Path(base)
+    src = clone(PIXAL_REPO, PIXAL_COMMIT, base / "Pixal3D")
+    done = base / f".pixal-ready-{PIXAL_COMMIT[:12]}"
+    if done.exists():
+        return src
+    pip("--no-deps", MOGE)  # only used to estimate the camera when no FOV is given
+    pip("setuptools", "wheel", "cmake")
+    # Pure-Python natten (no libnatten): hide the GPU so its setup.py skips the hours-long CUDA build;
+    # pixal_runner routes NAF's attention to natten's flex backend instead.
+    env = dict(os.environ, CUDA_VISIBLE_DEVICES="", NATTEN_CUDA_ARCH="")
+    if subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True).returncode == 0:
+        sh([sys.executable, "-m", "pip", "install", "-q", "--no-build-isolation", NATTEN], env=env)
+    else:
+        sh(["uv", "pip", "install", "-q", "--python", sys.executable, "--no-build-isolation", NATTEN], env=env)
+    sh([sys.executable, "-c", "import natten; print('natten', natten.__version__)"])
+    done.touch()
     return src
 
 
@@ -271,28 +297,40 @@ class TrellisEngine:
         max_faces = 500_000 if max_faces is None else (max_faces or 16_000_000)
         texture_size = int(o.get("texture_size") or 4096)
 
-        stage("loading TRELLIS.2" if self.pipe is None else "preparing")
-        pipe = self.pipeline()
-        stage(f"generating shape + PBR texture ({resolution})")
+        generator = o.get("generator") or "trellis2"
         image = Image.open(image_path)
-        if not has_transparency(image):
-            image = image.convert("RGB")  # so TRELLIS.2 runs its background remover instead of trusting alpha
-        mesh = pipe.run(image, seed=o.get("seed", 42),
-                        pipeline_type=RESOLUTIONS[resolution])[0]
-        mesh.simplify(16777216)  # nvdiffrast limit
+        if generator == "pixal3d":
+            if resolution == 512:
+                raise ValueError("pixal3d runs at resolution 1024 or 1536")
+            glb, front_rgba = self.run_pixal(image_path, o, stage, resolution, max_faces, texture_size)
+            mesh = None
+        elif generator == "trellis2":
+            stage("loading TRELLIS.2" if self.pipe is None else "preparing")
+            pipe = self.pipeline()
+            stage(f"generating shape + PBR texture ({resolution})")
+            if not has_transparency(image):
+                image = image.convert("RGB")  # so TRELLIS.2 runs its background remover instead of trusting alpha
+            mesh = pipe.run(image, seed=o.get("seed", 42),
+                            pipeline_type=RESOLUTIONS[resolution])[0]
+            mesh.simplify(16777216)  # nvdiffrast limit
 
-        stage(f"baking {texture_size}px texture, {max_faces} faces max")
-        glb = o_voxel.postprocess.to_glb(
-            vertices=mesh.vertices, faces=mesh.faces, attr_volume=mesh.attrs, coords=mesh.coords,
-            attr_layout=mesh.layout, voxel_size=mesh.voxel_size, aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
-            decimation_target=max_faces, texture_size=texture_size,
-            remesh=True, remesh_band=1, remesh_project=0, verbose=False,
-        )
+            stage(f"baking {texture_size}px texture, {max_faces} faces max")
+            glb = o_voxel.postprocess.to_glb(
+                vertices=mesh.vertices, faces=mesh.faces, attr_volume=mesh.attrs, coords=mesh.coords,
+                attr_layout=mesh.layout, voxel_size=mesh.voxel_size, aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
+                decimation_target=max_faces, texture_size=texture_size,
+                remesh=True, remesh_band=1, remesh_project=0, verbose=False,
+            )
+        else:
+            raise ValueError(f"unknown generator {generator!r}; use trellis2 or pixal3d")
+        if generator == "trellis2":
+            front_rgba = self.cutout_array(image)
         stage("checking orientation")
-        flipped = face_front(glb, self.cutout_array(image))
+        flipped = face_front(glb, front_rgba)
         info = {"vertices": int(len(glb.vertices)), "faces": int(len(glb.faces)), "textured": True,
                 "turned_around": flipped,
-                "engine": self.name, "resolution": resolution, "texture_size": texture_size}
+                "engine": self.name, "generator": generator, "resolution": resolution,
+                "texture_size": texture_size}
         painter = o.get("painter") or "trellis"
         if painter == "ultratex":
             info["painter"] = "ultratex"
@@ -308,6 +346,37 @@ class TrellisEngine:
         del mesh, glb
         self.free()
         return info
+
+    def run_pixal(self, image_path, o, stage, resolution, max_faces, texture_size):
+        """Pixal3D shape + texture in a subprocess (pixal_runner.py); returns (trimesh mesh, front RGBA array)."""
+        import tempfile
+        import numpy as np
+        import trimesh
+        from PIL import Image
+
+        stage("setting up Pixal3D")
+        src = setup_pixal(self.base)
+        work = Path(tempfile.mkdtemp(prefix="pixal_"))
+        back = o.get("_back_image")
+        self.unload()  # give Pixal3D the whole GPU
+        stage(f"generating with Pixal3D ({resolution}, {'front + back' if back else 'front only'})")
+        raw = work / "pixal.glb"
+        cmd = [sys.executable, ROOT / "pixal_runner.py", "--repo", src, "--front", image_path, "--out", raw,
+               "--resolution", resolution, "--seed", o.get("seed", 42), "--faces", max_faces,
+               "--texture", texture_size, "--cutouts", work]
+        if back:
+            cmd += ["--back", back]
+        if o.get("pixal_fov") is not None:
+            cmd += ["--fov", o["pixal_fov"]]
+        sh(cmd, env=dict(os.environ, PYTHONPATH=""))
+        front = np.asarray(Image.open(work / "cutout_0.png").convert("RGBA"))
+        return trimesh.load(raw, force="mesh", process=False), front
+
+    def unload(self):
+        """Drop the TRELLIS.2 pipeline from the GPU (it reloads on the next TRELLIS.2 job)."""
+        if self.pipe is not None:
+            self.pipe = None
+            self.free()
 
     def cutout_array(self, image):
         """RGBA numpy array of a PIL image with the background removed."""

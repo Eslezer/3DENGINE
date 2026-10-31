@@ -87,7 +87,11 @@ def cmd_submit(a):
     ext = img.suffix.lower()
     if ext not in IMAGE_EXTS:
         sys.exit(f"unsupported image type {ext}; use one of {sorted(IMAGE_EXTS)}")
-    if a.resolution == 1536 and a.painter == "trellis" and not a.no_texture:
+    if a.generator == "pixal3d" and a.engine not in ("auto", "trellis2"):
+        sys.exit("--generator pixal3d runs on the trellis2 engine")
+    if a.generator == "pixal3d" and a.resolution == 512:
+        sys.exit("--generator pixal3d needs --resolution 1024 or 1536")
+    if a.resolution == 1536 and a.painter == "trellis" and a.generator == "trellis2" and not a.no_texture:
         print("warning: --resolution 1536 has produced corrupted TRELLIS.2 textures; use 1024, "
               "or 1536 together with --painter ultratex/hy21")
     back = Path(a.back) if a.back else None
@@ -95,7 +99,7 @@ def cmd_submit(a):
         sys.exit(f"bad --back image: {back}")
     q = open_queue()
     beats = heartbeats(q)
-    engine = pick_engine(a.engine, beats)
+    engine = "trellis2" if a.generator == "pixal3d" else pick_engine(a.engine, beats)
     job_id = time.strftime("%Y%m%d-%H%M%S-", time.gmtime()) + secrets.token_hex(2)
     job = {
         "id": job_id,
@@ -116,6 +120,7 @@ def cmd_submit(a):
             "resolution": a.resolution,
             "texture_size": a.texture_size,
             "painter": a.painter,
+            "generator": a.generator,
             "pin_front": not a.no_pin_front,
         },
     }
@@ -326,10 +331,13 @@ def main():
     s.add_argument("--resolution", type=int, choices=[512, 1024, 1536], default=1024,
                    help="trellis2 only: voxel resolution (1536 = most detail, slowest)")
     s.add_argument("--texture-size", type=int, default=4096, help="trellis2 only: texture map size in px")
+    s.add_argument("--generator", choices=["trellis2", "pixal3d"], default="trellis2",
+                   help="trellis2 engine: who builds the shape (pixal3d = TencentARC Pixal3D, pixel-aligned to the "
+                        "image, MIT; with --back it reconstructs from both views)")
     s.add_argument("--painter", choices=["trellis", "ultratex", "hy21"], default="trellis",
                    help="trellis2 only: who paints the texture (ultratex = FLUX.2 + UltraTex, hy21 = Hunyuan3D-2.1 "
                         "PBR with lighting removed; both non-commercial licenses)")
-    s.add_argument("--back", help="ultratex/hy21: back view of the same object (ultratex pins it to the back; "
+    s.add_argument("--back", help="pixal3d/ultratex/hy21: back view of the same object (ultratex pins it to the back; "
                                   "hy21 uses it as a second reference)")
     s.add_argument("--no-pin-front", action="store_true",
                    help="ultratex only: let UltraTex repaint the front instead of keeping the reference image there")

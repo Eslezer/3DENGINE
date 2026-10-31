@@ -8,8 +8,9 @@ Pixal3D is built on TRELLIS.2 and shares its extensions, so it runs in the same 
 trellis_engine, but as a subprocess so its models never sit next to TRELLIS.2's in VRAM.
 Changes to the stock scripts (applied by patching at import time, not by editing them):
   * attention goes through trellis_compat's xformers stand-in (torch SDPA), no flash-attn;
-  * natten (needed by the NAF feature upsampler) is installed without its CUDA library and
-    runs on PyTorch's compiled flex attention instead of the cutlass kernels NAF asks for;
+  * natten (needed by the NAF feature upsampler) is installed without its CUDA library, and
+    NAF's neighbourhood attention runs on na2d_torch below instead of natten's cutlass kernel
+    (natten's flex fallback builds a dense mask: 512 GiB at NAF's 1024 x 1024);
   * the gated RMBG-2.0 background remover is swapped for the open BiRefNet;
   * the GLB is exported with PNG textures and our face/texture limits.
 
@@ -26,42 +27,59 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import torch
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent
 FRAME_FILL = 1 / 1.1  # object size / frame size, as in Pixal3D's preprocess_image
 
 
+def na2d_torch(query, key, value, kernel_size, dilation=1, stride=1, scale=None, chunk_bytes=2 << 30, **_):
+    """2-D neighbourhood attention in plain PyTorch, matching natten.na2d's semantics.
+
+    Layout [B, X, Y, heads, dim] (V may have its own dim). Each query attends to the K x K window
+    centred on it, shifted inwards at the borders so it always has K x K neighbours; dilation d
+    splits the grid into d x d interleaved sub-grids that attend independently. Processed in row
+    chunks, so memory stays small even for 1024 x 1024 maps (NAF's upsampler).
+    """
+    kx, ky = (kernel_size, kernel_size) if isinstance(kernel_size, int) else kernel_size
+    dx, dy = (dilation, dilation) if isinstance(dilation, int) else dilation
+    if (stride if isinstance(stride, int) else max(stride)) != 1:
+        raise NotImplementedError("na2d_torch: stride must be 1")
+    scale = query.shape[-1] ** -0.5 if scale is None else scale
+    if dx > 1 or dy > 1:
+        out = query.new_empty(*query.shape[:-1], value.shape[-1])
+        for i in range(dx):
+            for j in range(dy):
+                out[:, i::dx, j::dy] = na2d_torch(query[:, i::dx, j::dy], key[:, i::dx, j::dy],
+                                                  value[:, i::dx, j::dy], (kx, ky), 1, 1, scale, chunk_bytes)
+        return out
+    b, X, Y, h, _ = query.shape
+    if X < kx or Y < ky:
+        raise ValueError(f"na2d_torch: map {X}x{Y} smaller than kernel {kx}x{ky}")
+    dev = query.device
+    rows = (torch.arange(X, device=dev) - kx // 2).clamp(0, X - kx)[:, None] + torch.arange(kx, device=dev)  # [X, kx]
+    cols = (torch.arange(Y, device=dev) - ky // 2).clamp(0, Y - ky)[:, None] + torch.arange(ky, device=dev)  # [Y, ky]
+    per_row = b * kx * Y * ky * h * (query.shape[-1] + value.shape[-1]) * query.element_size()
+    step = max(1, int(chunk_bytes // max(per_row, 1)))
+    out = []
+    for r0 in range(0, X, step):
+        r = rows[r0:r0 + step]                                    # [R, kx]
+        kr, vr = key[:, r], value[:, r]                           # [B, R, kx, Y, h, d]
+        kg, vg = kr[:, :, :, cols], vr[:, :, :, cols]             # [B, R, kx, Y, ky, h, d]
+        q = query[:, r0:r0 + step]                                # [B, R, Y, h, d]
+        logits = torch.einsum("brwhd,brawchd->brwhac", q.float(), kg.float()) * scale
+        w = logits.flatten(-2).softmax(-1).view_as(logits).to(value.dtype)
+        out.append(torch.einsum("brwhac,brawchd->brwhd", w, vg))
+    return torch.cat(out, 1)
+
+
 def patch_natten():
+    """NAF calls natten's compiled cutlass kernel, which a pure-Python natten install lacks; use na2d_torch."""
     import natten
-    import torch
 
-    natten.allow_flex_compile()
-    orig = natten.na2d
-
-    compiled = [True]
-
-    def flex(q, k, v, **kw):
-        if compiled[0]:
-            try:
-                return orig(q, k, v, backend="flex-fna", torch_compile=True, **kw)
-            except Exception as e:  # e.g. no C compiler for Triton; eager flex is slower and hungrier but exact
-                print(f"natten: compiled flex failed ({type(e).__name__}: {e}); using eager flex", flush=True)
-                compiled[0] = False
-        return orig(q, k, v, backend="flex-fna", torch_compile=False, **kw)
-
-    def na2d(query, key, value, *args, backend=None, torch_compile=False, **kw):
-        if args:
-            kw["kernel_size"] = args[0]
-        d = query.shape[-1]
-        if value.shape[-1] == d:
-            return flex(query, key, value, **kw)
-        # Flex needs equal QK and V head dims (NAF uses 64 and 256). The attention weights depend
-        # only on Q and K, so attending to V in d-wide slices and concatenating is exact.
-        pad = (-value.shape[-1]) % d
-        v = torch.nn.functional.pad(value, (0, pad)) if pad else value
-        out = torch.cat([flex(query, key, c.contiguous(), **kw) for c in v.split(d, dim=-1)], dim=-1)
-        return out[..., :value.shape[-1]]
+    def na2d(query, key, value, kernel_size, *args, stride=1, dilation=1, scale=None, backend=None, **kw):
+        return na2d_torch(query, key, value, kernel_size, dilation, stride, scale)
 
     natten.na2d = na2d  # NAF does `from natten import na2d` when torch.hub imports it
 

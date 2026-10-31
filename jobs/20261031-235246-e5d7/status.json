@@ -1,6 +1,7 @@
 {
-  "time": "2026-10-31T23:52:50Z",
+  "time": "2026-10-31T23:52:53Z",
   "worker": "35d084ef-1662-4164-a775-69bb7d5c48c5-vgndd-878",
   "engine": "trellis2",
-  "state": "claimed"
+  "state": "running",
+  "stage": "setting up Pixal3D"
 }

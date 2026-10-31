@@ -1,7 +1,14 @@
 {
-  "time": "2026-10-31T23:57:24Z",
+  "time": "2026-10-31T23:57:32Z",
   "worker": "35d084ef-1662-4164-a775-69bb7d5c48c5-vgndd-878",
   "engine": "trellis2",
-  "state": "running",
-  "stage": "exporting"
+  "state": "done",
+  "vertices": 366332,
+  "faces": 477675,
+  "textured": true,
+  "turned_around": true,
+  "generator": "pixal3d",
+  "resolution": 1536,
+  "texture_size": 4096,
+  "seconds": 281.1
 }

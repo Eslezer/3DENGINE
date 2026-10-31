@@ -1,0 +1,93 @@
+Traceback (most recent call last):
+  File "/tmp/hy3d/3DENGINE/worker.py", line 305, in serve
+    info = engine.run(image, options, out, stage)
+  File "/tmp/hy3d/3DENGINE/trellis_engine.py", line 319, in run
+    glb, front_rgba = self.run_pixal(image_path, o, stage, resolution, max_faces, texture_size)
+                      ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hy3d/3DENGINE/trellis_engine.py", line 385, in run_pixal
+    sh_tail(cmd, env=dict(os.environ, PYTHONPATH=""))
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hy3d/3DENGINE/trellis_engine.py", line 68, in sh_tail
+    raise RuntimeError(f"{Path(str(cmd[1])).name} failed (exit {proc.returncode}); last output:\n" + "".join(tail))
+RuntimeError: pixal_runner.py failed (exit 1); last output:
+    ^
+  File "/usr/local/lib/python3.13/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/tmp/hy3d/Pixal3D/pixal3d/pipelines/pixal3d_image_to_3d.py", line 689, in run
+    cond_shape_lr = self.get_proj_cond_shape(
+        self.image_cond_model_shape_512, [image], coords,
+    ...<2 lines>...
+        mesh_scale=mesh_scale,
+    )
+  File "/usr/local/lib/python3.13/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/tmp/hy3d/Pixal3D/pixal3d/pipelines/pixal3d_mv_image_to_3d.py", line 121, in get_proj_cond_shape
+    z_global, z_proj = self._run_extractor(
+                       ~~~~~~~~~~~~~~~~~~~^
+        image_cond_model, views, camera_angle_x, distance, mesh_scale)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hy3d/Pixal3D/pixal3d/pipelines/pixal3d_mv_image_to_3d.py", line 62, in _run_extractor
+    return image_cond_model(
+        image,
+    ...<3 lines>...
+        transform_matrix=transform_matrix,
+    )
+  File "/usr/local/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/tmp/hy3d/Pixal3D/pixal3d/trainers/flow_matching/mixins/image_conditioned_proj.py", line 816, in forward
+    z_view = self._project_single_view(
+        z_patchtokens_spatial[idx],
+    ...<4 lines>...
+        calc_mat_flat[idx],
+    )
+  File "/tmp/hy3d/Pixal3D/pixal3d/trainers/flow_matching/mixins/image_conditioned_proj.py", line 746, in _project_single_view
+    hr_features = self.naf_model(image_for_naf, lr_features_bchw, self.naf_target_size)
+  File "/usr/local/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/marimo/.cache/torch/hub/valeoai_NAF_main/src/model/naf.py", line 115, in forward
+    out = self.upsampler(queries, keys, values, image)
+  File "/usr/local/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/marimo/.cache/torch/hub/valeoai_NAF_main/src/layers/attentions.py", line 72, in forward
+    out = na2d(q, k, v, kernel_size=self.kernel_size, dilation=dilation, stride=1, backend="cutlass-fna")
+  File "/tmp/hy3d/3DENGINE/pixal_runner.py", line 46, in na2d
+    return orig(*args, backend="flex-fna", torch_compile=False, **kw)
+  File "/tmp/uv-venv/lib/python3.13/site-packages/natten/functional.py", line 835, in na2d
+    return neighborhood_attention_generic(
+        query=query,
+    ...<19 lines>...
+        torch_compile=torch_compile,
+    )
+  File "/tmp/uv-venv/lib/python3.13/site-packages/natten/functional.py", line 451, in neighborhood_attention_generic
+    outputs = flex_fna_generic(
+        query=query,
+    ...<10 lines>...
+        return_lse=has_additional_attention,
+    )
+  File "/tmp/uv-venv/lib/python3.13/site-packages/natten/backends/flex.py", line 526, in flex_fna_generic
+    na_tensor_checks(query, key, value, must_match_head_dims=True)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/uv-venv/lib/python3.13/site-packages/natten/utils/checks.py", line 123, in na_tensor_checks
+    target_fn(
+    ~~~~~~~~~^
+        f"{backend_name} does not support different head dims for QK and V, got "
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"{query.shape[-1]=}, {value.shape[-1]=}.",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        exception=ValueError,
+        ^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/tmp/uv-venv/lib/python3.13/site-packages/natten/utils/checks.py", line 43, in log_or_raise_error
+    raise exception(msg)
+ValueError: This operation/backend does not support different head dims for QK and V, got query.shape[-1]=64, value.shape[-1]=256.
+

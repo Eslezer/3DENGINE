@@ -1,7 +1,7 @@
 {
-  "time": "2026-10-31T23:42:19Z",
+  "time": "2026-10-31T23:44:55Z",
   "worker": "35d084ef-1662-4164-a775-69bb7d5c48c5-vgndd-878",
   "engine": "trellis2",
-  "state": "running",
-  "stage": "generating with Pixal3D (1536, front + back)"
+  "state": "error",
+  "error": "CalledProcessError: Command '['/tmp/uv-venv/bin/python', '/tmp/hy3d/3DENGINE/pixal_runner.py', '--repo', '/tmp/hy3d/Pixal3D', '--front', '/tmp/tmp3uxml6gs/input.png', '--out', '/tmp/pixal_ebip4ylk/pixal.glb', '--resolution', '1536', '--seed', '1234', '--faces', '500000', '--texture', '4096', '--cutouts', '/tmp/pixal_ebip4ylk', '--back', '/tmp/tmp3uxml6gs/back.png']' returned non-zero exit status 1."
 }

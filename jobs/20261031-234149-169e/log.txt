@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/tmp/hy3d/3DENGINE/worker.py", line 305, in serve
+    info = engine.run(image, options, out, stage)
+  File "/tmp/hy3d/3DENGINE/trellis_engine.py", line 305, in run
+    glb, front_rgba = self.run_pixal(image_path, o, stage, resolution, max_faces, texture_size)
+                      ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hy3d/3DENGINE/trellis_engine.py", line 371, in run_pixal
+    sh(cmd, env=dict(os.environ, PYTHONPATH=""))
+    ~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hy3d/3DENGINE/trellis_engine.py", line 54, in sh
+    subprocess.run(list(map(str, cmd)), check=True, cwd=cwd, env=env)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/tmp/uv-venv/bin/python', '/tmp/hy3d/3DENGINE/pixal_runner.py', '--repo', '/tmp/hy3d/Pixal3D', '--front', '/tmp/tmp3uxml6gs/input.png', '--out', '/tmp/pixal_ebip4ylk/pixal.glb', '--resolution', '1536', '--seed', '1234', '--faces', '500000', '--texture', '4096', '--cutouts', '/tmp/pixal_ebip4ylk', '--back', '/tmp/tmp3uxml6gs/back.png']' returned non-zero exit status 1.

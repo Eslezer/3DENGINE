@@ -34,16 +34,34 @@ FRAME_FILL = 1 / 1.1  # object size / frame size, as in Pixal3D's preprocess_ima
 
 def patch_natten():
     import natten
+    import torch
 
     natten.allow_flex_compile()
     orig = natten.na2d
 
-    def na2d(*args, backend=None, torch_compile=False, **kw):
-        try:
-            return orig(*args, backend="flex-fna", torch_compile=True, **kw)
-        except Exception as e:  # e.g. no C compiler for Triton; eager flex is slower and hungrier but exact
-            print(f"natten: compiled flex failed ({type(e).__name__}: {e}); using eager flex", flush=True)
-            return orig(*args, backend="flex-fna", torch_compile=False, **kw)
+    compiled = [True]
+
+    def flex(q, k, v, **kw):
+        if compiled[0]:
+            try:
+                return orig(q, k, v, backend="flex-fna", torch_compile=True, **kw)
+            except Exception as e:  # e.g. no C compiler for Triton; eager flex is slower and hungrier but exact
+                print(f"natten: compiled flex failed ({type(e).__name__}: {e}); using eager flex", flush=True)
+                compiled[0] = False
+        return orig(q, k, v, backend="flex-fna", torch_compile=False, **kw)
+
+    def na2d(query, key, value, *args, backend=None, torch_compile=False, **kw):
+        if args:
+            kw["kernel_size"] = args[0]
+        d = query.shape[-1]
+        if value.shape[-1] == d:
+            return flex(query, key, value, **kw)
+        # Flex needs equal QK and V head dims (NAF uses 64 and 256). The attention weights depend
+        # only on Q and K, so attending to V in d-wide slices and concatenating is exact.
+        pad = (-value.shape[-1]) % d
+        v = torch.nn.functional.pad(value, (0, pad)) if pad else value
+        out = torch.cat([flex(query, key, c.contiguous(), **kw) for c in v.split(d, dim=-1)], dim=-1)
+        return out[..., :value.shape[-1]]
 
     natten.na2d = na2d  # NAF does `from natten import na2d` when torch.hub imports it
 

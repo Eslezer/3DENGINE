@@ -32,8 +32,10 @@ Never ask the user to paste tokens in chat.
    is only inline, ask for it as a file.
 2. `python3 hy3d.py status`. If the trellis2 heartbeat is older than about 15 min, ask the user to (re)start
    `molab/trellis_worker.py`. Queued jobs run once it starts.
-3. Generate (in the background, about 6 to 15 min):
-   `python3 hy3d.py submit <front> --back <back> --engine trellis2 --painter hy21 --resolution 1536 --wait`
+3. Generate (in the background, about 5 min; the first run downloads weights):
+   `python3 hy3d.py submit <front> --back <back> --generator pixal3d --resolution 1536 --wait`
+   (Pixal3D on the trellis2 worker; with `--back` it reconstructs from both drawings). Alternative:
+   `--engine trellis2 --painter hy21 --resolution 1536` (TRELLIS.2 shape + Hunyuan 2.1 paint, about 12 min).
 4. Put the drawings back on: `python3 tools/remix.py outputs/<job>/result.glb <front> outputs/<job>/remix
    --back <back> --name <character>`. This upscales the texture and drawings 4x (anime Real-ESRGAN), projects
    them onto the front- and back-facing surfaces and keeps the painter's texture on the sides. It writes a
@@ -46,7 +48,13 @@ Never ask the user to paste tokens in chat.
 
 ### Ranking of what we tried (Flash character, front + back drawings)
 
-1. **Best:** the user's other tool's model (Hunyuan-2.1-like: clean, de-lit, 150k faces) + `tools/remix.py`
+0. **Best: Pixal3D (`--generator pixal3d --back`, 1536) + `tools/remix.py`.** Pixal3D lifts image pixels
+   into 3D, so its shape follows the drawing closely: the mask, the emblem relief and the suit seams are sculpted, the
+   back matches the back drawing, and remix aligns at a silhouette IoU of 0.93. The emblem is clean
+   (no stretching), and the eyes and face are crisp. Its own texture is weak (blank purple eyes, smeared mask), so always remix.
+   Flaws: some mask red bleeds onto the hair beside the face (3/4 view), the boots are darker and shinier on the sides, and
+   the drawing's pink thigh shading comes along. MIT licence, so commercial use is OK (remix's Real-ESRGAN is BSD).
+1. **Next best:** the user's other tool's model (Hunyuan-2.1-like: clean, de-lit, 150k faces) + `tools/remix.py`
    with the user's drawings. If the user sends another tool's OBJ + texture, remix it directly. Crisp anime eyes,
    emblem and suit lines; clean sides. Remaining flaws: the drawing's own shading (pink thigh patches) comes along,
    red flecks at the face outline, and the emblem stretches on the deep chest curve.
@@ -65,10 +73,21 @@ Never ask the user to paste tokens in chat.
 - Commercial use is fine with TRELLIS.2 (MIT), its own texture, and the projection tools.
 - UltraTex/FLUX.2-klein is FLUX Non-Commercial. Hunyuan3D-2.1 is under the Tencent Hunyuan Non-Commercial
   licence (not valid in the EU, UK or South Korea).
-- If the user says a model is commercial, use TRELLIS.2 1024 + projection only.
+- Pixal3D is MIT too (code and weights).
+- If the user says a model is commercial, use Pixal3D or TRELLIS.2 (1024) with projection/remix, and no
+  ultratex or hy21 painter.
 - Do not help get around a licence.
 
 ## Hard-won lessons (do not relearn these)
+
+- **Pixal3D** (`pixal_runner.py`, subprocess in the TRELLIS.2 env): NAF's feature upsampler needs natten.
+  natten is installed **without** its CUDA library (the GPU is hidden during `pip install`; a full build takes
+  hours), and `na2d_torch` replaces it: exact neighbourhood attention in plain PyTorch, verified against
+  natten. Do not use natten's flex backend: it needs equal QK/V head dims, and its eager mode builds a 512 GiB
+  dense mask. Front + back go to `inference_mv` on the 0° and 180° cameras of the example rig. Both drawings
+  are scaled so the object fills 1/1.1 of a 1024 frame, as in its single-view preprocessing. Its output also
+  needs `face_front` (`turned_around` was true on Flash). Job errors carry the last 80 lines of subprocess
+  output (`sh_tail`).
 
 - **Orientation:** TRELLIS.2 sometimes builds the figure facing −Z. `trellis_engine.face_front` compares the
   mesh's geometric creases with the drawing's line art from +Z and −Z (`tools/orient_check.py`) and turns it
@@ -99,7 +118,8 @@ Never ask the user to paste tokens in chat.
 |---|---|
 | `hy3d.py` | client: `submit / wait / fetch / status / clean / reset-queue / preview / project` |
 | `worker.py`, `hy3d_queue.py` | worker loop, git queue |
-| `trellis_engine.py` | TRELLIS.2 setup and inference, orientation fix, painters (`trellis`, `ultratex`, `hy21`) |
+| `trellis_engine.py` | TRELLIS.2 setup and inference, orientation fix, generators (`trellis2`, `pixal3d`), painters (`trellis`, `ultratex`, `hy21`) |
+| `pixal_runner.py` | Pixal3D single- and multi-view runner (patches: SDPA attention, `na2d_torch`, open BiRefNet) |
 | `hy21_engine.py`, `hy21_runner.py` | Hunyuan3D-2.1 PBR painter (separate venv, subprocess) |
 | `ultratex_engine.py`, `ultratex_compat/` | UltraTex via ComfyUI, nvdiffrast renderer, pin node |
 | `tools/remix.py` | **upscale and project the drawings onto any textured GLB/OBJ, keeping its own texture on the sides; GLB + OBJ zip** |
